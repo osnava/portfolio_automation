@@ -229,6 +229,44 @@ Given the script output above, an LLM with `SYSPROMPT.MD` produces:
 | WATCH | - | SILVER | Weekly Z +1.86 nearing +2 OB threshold |
 | HEDGE | - | Portfolio | VIX 14.95 = cheap puts available |
 
+## Understanding GLI (Global Liquidity Index)
+
+The GLI measures actual money available in the financial system using Fed data.
+
+**Formula:** `GLI = Fed Balance Sheet - TGA - RRP`
+
+### Components
+
+| Term | FRED Code | Full Name | Description |
+|------|-----------|-----------|-------------|
+| **Fed BS** | `WALCL` | Fed Total Assets | Total assets held by the Federal Reserve |
+| **TGA** | `WTREGEN` | Treasury General Account | US Treasury's checking account at the Fed |
+| **RRP** | `RRPONTSYD` | Reverse Repo | Cash parked at the Fed by money market funds |
+
+### Why Subtract TGA and RRP?
+
+```
+Fed Balance Sheet    = Money the Fed has "printed" (QE)
+- TGA                = Money sitting idle at Treasury (not circulating)
+- RRP                = Money parked at Fed overnight (not circulating)
+────────────────────────────────────────────────────────────────────
+= Net Liquidity      = Actual money available in financial system
+```
+
+### Market Effects
+
+| Component | When It Rises | Market Effect |
+|-----------|---------------|---------------|
+| **Fed BS** | QE / asset purchases | Bullish (more liquidity) |
+| **TGA** | Treasury accumulates cash | Bearish (drains liquidity) |
+| **RRP** | Excess cash parked at Fed | Bearish (drains liquidity) |
+
+### Interpreting GLI Trends
+
+- **Expanding** (+1% over 4 weeks): More dollars chasing assets, bullish for risk assets
+- **Contracting** (-1% over 4 weeks): Less liquidity, bearish, risk-off environment
+- **Correlation**: GLI historically correlates with BTC, stocks, and risk assets
+
 ## Output Legend
 
 - **Trend**: Uptrend | Downtrend | Sideways
