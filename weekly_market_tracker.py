@@ -10,8 +10,7 @@ import pandas as pd
 import requests
 import yfinance as yf
 from dotenv import load_dotenv
-from ta.momentum import StochRSIIndicator
-from ta.trend import MACD, ADXIndicator
+from ta.trend import ADXIndicator
 
 warnings.filterwarnings('ignore')
 
@@ -39,7 +38,8 @@ ASSETS = {
     "SILVER": "SI=F",
 }
 
-MA_PERIODS = [20, 50, 100, 200]
+MA_PERIODS = [20, 50, 200]
+ZSCORE_WINDOW = 20
 
 # ============================================================================
 # DATA FETCHING
@@ -86,6 +86,25 @@ def get_vix():
     """Fetch current VIX value."""
     hist = yf.Ticker("^VIX").history(period="5d")
     return round(hist['Close'].iloc[-1], 2) if not hist.empty else None
+
+
+def get_vix_zscore():
+    """Fetch VIX and calculate inverted VIX z-score."""
+    hist = yf.download("^VIX", period="3mo", interval="1d", progress=False)
+    if hist.empty or len(hist) < ZSCORE_WINDOW:
+        return None, None, None
+
+    if isinstance(hist.columns, pd.MultiIndex):
+        hist.columns = hist.columns.get_level_values(0)
+
+    vix = hist['Close'].iloc[-1]
+    inv_vix = 1 / hist['Close']
+
+    mean = inv_vix.rolling(ZSCORE_WINDOW).mean().iloc[-1]
+    std = inv_vix.rolling(ZSCORE_WINDOW).std().iloc[-1]
+    zscore = (inv_vix.iloc[-1] - mean) / std if std > 0 else 0
+
+    return round(vix, 2), round(zscore, 2), round(inv_vix.iloc[-1], 4)
 
 
 # ============================================================================
@@ -145,35 +164,36 @@ def calculate_gli():
 # TECHNICAL ANALYSIS
 # ============================================================================
 
-def interpret_stoch_rsi(k, d):
-    """Interpret Stoch RSI (0-1 scale from ta library)."""
-    if k is None or np.isnan(k):
-        return "N/A"
-    
-    k = round(k * 100, 1)
-    d = round(d * 100, 1) if d and not np.isnan(d) else None
-    
-    zone = "Overbought" if k > 80 else "Oversold" if k < 20 else \
-           "Upper Neutral" if k > 60 else "Lower Neutral" if k < 40 else "Neutral"
-    
-    cross = " ^" if d and k > d and abs(k - d) < 10 else " v" if d and k < d and abs(k - d) < 10 else ""
-    return f"{zone} ({k}){cross}"
+def calculate_zscore(close, window=ZSCORE_WINDOW):
+    """Calculate z-score for price series."""
+    if len(close) < window:
+        return None, None
 
+    mean = close.rolling(window).mean().iloc[-1]
+    std = close.rolling(window).std().iloc[-1]
 
-def interpret_macd(macd_val, hist, hist_prev=None):
-    """Interpret MACD values."""
-    if macd_val is None or np.isnan(macd_val):
-        return "N/A"
-    
-    trend = "Bullish" if hist > 0 else "Bearish"
-    
-    momentum = ""
-    if hist_prev is not None and not np.isnan(hist_prev):
-        strengthening = (hist > 0 and hist > hist_prev) or (hist < 0 and hist < hist_prev)
-        momentum = " Strengthening" if strengthening else " Weakening"
-    
-    cross = " [Near Cross]" if abs(hist) < abs(macd_val) * 0.1 else ""
-    return f"{trend}{momentum}{cross}"
+    if std == 0 or np.isnan(std):
+        return 0, "Neutral"
+
+    zscore = (close.iloc[-1] - mean) / std
+    zscore = round(zscore, 2)
+
+    if zscore >= 2.5:
+        zone = "Extreme OB"
+    elif zscore >= 2:
+        zone = "Overbought"
+    elif zscore >= 1:
+        zone = "Upper"
+    elif zscore <= -2.5:
+        zone = "Extreme OS"
+    elif zscore <= -2:
+        zone = "Oversold"
+    elif zscore <= -1:
+        zone = "Lower"
+    else:
+        zone = "Neutral"
+
+    return zscore, zone
 
 
 def format_ma_distance(close, price, periods):
@@ -233,35 +253,33 @@ def calculate_technicals(ticker):
     data = yf.download(ticker, period="1y", interval="1d", progress=False)
     if data.empty:
         return None
-    
+
     if isinstance(data.columns, pd.MultiIndex):
         data.columns = data.columns.get_level_values(0)
-    
+
     close = data['Close']
-    
+
     def get_indicators(df, close_col):
-        stoch = StochRSIIndicator(close_col, window=14, smooth1=3, smooth2=3)
-        macd = MACD(close_col)
-        hist = macd.macd_diff()
+        zscore, zone = calculate_zscore(close_col)
         return {
-            'stoch_rsi': interpret_stoch_rsi(stoch.stochrsi_k().iloc[-1], stoch.stochrsi_d().iloc[-1]),
-            'macd': interpret_macd(macd.macd().iloc[-1], hist.iloc[-1], hist.iloc[-2] if len(hist) > 1 else None),
+            'zscore': zscore,
+            'zscore_zone': zone,
             'ma_distance': format_ma_distance(close_col, close_col.iloc[-1], MA_PERIODS),
         }
-    
+
     daily = get_indicators(data, close)
     daily['trend'], daily['trend_strength'], daily['adx'] = detect_trend(data)
-    
+
     weekly_df = data.resample('W').agg({
         'Open': 'first', 'High': 'max', 'Low': 'min', 'Close': 'last', 'Volume': 'sum'
     }).dropna()
-    
+
     if len(weekly_df) >= 26:
         weekly = get_indicators(weekly_df, weekly_df['Close'])
         weekly['trend'], weekly['trend_strength'], weekly['adx'] = detect_trend(weekly_df) if len(weekly_df) >= 50 else ("Insufficient Data", "N/A", None)
     else:
-        weekly = {'stoch_rsi': 'N/A', 'macd': 'N/A', 'ma_distance': 'N/A', 'trend': 'Insufficient Data', 'trend_strength': 'N/A', 'adx': None}
-    
+        weekly = {'zscore': None, 'zscore_zone': 'N/A', 'ma_distance': 'N/A', 'trend': 'Insufficient Data', 'trend_strength': 'N/A', 'adx': None}
+
     return {'price': close.iloc[-1], 'daily': daily, 'weekly': weekly}
 
 
@@ -291,11 +309,23 @@ def main():
     except Exception:
         print("     ❌ Could not retrieve")
     
-    print("\n  Volatility:")
+    print("\n  Volatility & Regime:")
     try:
-        if vix := get_vix():
-            desc = "Low" if vix < 15 else "Normal" if vix < 20 else "Elevated" if vix < 30 else "High"
-            print(f"     VIX: {vix} - {desc}")
+        vix, inv_vix_z, inv_vix = get_vix_zscore()
+        if vix:
+            vix_desc = "Low" if vix < 15 else "Normal" if vix < 20 else "Elevated" if vix < 30 else "High"
+            if inv_vix_z >= 1.5:
+                regime = "Complacency"
+            elif inv_vix_z <= -1.5:
+                regime = "Fear"
+            elif inv_vix_z >= 0.5:
+                regime = "Risk-On"
+            elif inv_vix_z <= -0.5:
+                regime = "Risk-Off"
+            else:
+                regime = "Neutral"
+            print(f"     VIX: {vix} ({vix_desc}) | 1/VIX: {inv_vix}")
+            print(f"     1/VIX Z-Score: {inv_vix_z:+.2f} → {regime}")
         else:
             print("     ❌ Could not retrieve")
     except Exception:
@@ -321,7 +351,8 @@ def main():
                 for tf, icon in [('daily', '📅'), ('weekly', '📆')]:
                     d = tech[tf]
                     print(f"\n  {icon} {tf.upper()}: {d['trend']} ({d['trend_strength']}, ADX: {d['adx']})")
-                    print(f"     RSI: {d['stoch_rsi']} | MACD: {d['macd']}")
+                    z_display = f"{d['zscore']:+.2f}" if d['zscore'] is not None else "N/A"
+                    print(f"     Z-Score: {z_display} ({d['zscore_zone']})")
                     print(f"     MAs: {d['ma_distance']}")
             else:
                 print("  ❌ Could not retrieve")
@@ -331,8 +362,8 @@ def main():
     # LEGEND
     print(f"\n{'='*90}\n  📖 QUICK REFERENCE\n{'='*90}")
     print("  TREND: 📈 Up | 📉 Down | ↔️ Sideways | ADX: <20 Weak, 20-40 Mod, >40 Strong")
-    print("  RSI: >80 OB | <20 OS | ^ Bull cross | v Bear cross")
-    print("  MACD: Bull/Bear + Strength/Weak | [Near Cross] = reversal")
+    print("  Z-SCORE: >+2 OB | <-2 OS | >+2.5 Extreme OB | <-2.5 Extreme OS")
+    print("  1/VIX Z: >+1.5 Complacency | <-1.5 Fear | ±0.5-1.5 Risk-On/Off")
     print("  F&G: 0-25 Ext Fear | 26-45 Fear | 46-55 Neutral | 56-75 Greed | 76-100 Ext Greed")
     print("  GLI: 📈 Expanding >1% | 📉 Contracting <-1% | ➡️ Flat")
     print("=" * 90)
