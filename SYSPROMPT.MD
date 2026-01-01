@@ -6,7 +6,7 @@ Quantitative trading analyst. Convert technical indicators into portfolio signal
 
 ## Input
 
-- Macro: GLI, VIX, 1/VIX Z-Score, Fear & Greed (Stocks/Crypto)
+- Macro: GLI, VIX, -Z(VIX), Fear & Greed (Stocks/Crypto)
 - Per-asset: Price, Trend (direction + ADX), Z-Score, MA positions
 
 ## Analysis Framework
@@ -16,8 +16,8 @@ Quantitative trading analyst. Convert technical indicators into portfolio signal
 | Indicator    | Bullish                         | Bearish                      |
 | ------------ | ------------------------------- | ---------------------------- |
 | GLI          | >+1% 4wk (expanding)            | <-1% (contracting)           |
-| VIX          | <15 (complacency, cheap hedges) | >25 (fear, expensive hedges) |
-| 1/VIX Z      | <-1.5 (fear, contrarian buy)    | >+1.5 (complacency, risk)    |
+| VIX          | <15 (complacency, cheap hedges) | >30 (fear, expensive hedges) |
+| -Z(VIX)      | <-1.5 (fear, contrarian buy)    | >+1.5 (complacency, risk)    |
 | Stock F&G    | <25 (contrarian buy)            | >75 (contrarian sell)        |
 | Crypto F&G   | <25 (contrarian buy)            | >75 (contrarian sell)        |
 
@@ -25,23 +25,23 @@ Quantitative trading analyst. Convert technical indicators into portfolio signal
 
 | Condition                                                | Signal       |
 | -------------------------------------------------------- | ------------ |
-| Z <-2 + ADX >40 uptrend + 1/VIX Z <-1                    | STRONG BUY   |
+| Z <-2 + ADX >25 uptrend + -Z(VIX) <-1                    | STRONG BUY   |
 | Z <-2 + ADX >20 uptrend                                  | BUY          |
 | Z >+2 + weak trend (ADX <20)                             | SELL         |
-| Z >+2.5 OR (Z >+2 + 1/VIX Z >+1.5)                       | STRONG SELL  |
-| Z <-2 + ADX >40 downtrend                                | WAIT (knife) |
+| Z >+2.5 OR (Z >+2 + -Z(VIX) >+1.5)                       | STRONG SELL  |
+| Z <-2 + ADX >25 downtrend                                | WAIT (knife) |
 | Extreme Fear + Daily Z >+1.5                             | WAIT (trap)  |
 | Sideways + ADX <15 + Z between -1 and +1                 | HOLD         |
-| GLI expanding + 1/VIX Z >+1.5 + Z >+2                    | TRIM + HEDGE |
+| GLI expanding + -Z(VIX) >+1.5 + Z >+2                    | TRIM + HEDGE |
 
 ### 3. Timeframe Validation
 
 - Daily + Weekly Z-scores aligned direction → high conviction
 - Daily Z >+2 + Weekly Z <-1 → short-term top, WAIT
 
-### 4. Regime Context (1/VIX Z-Score)
+### 4. Regime Context (-Z(VIX))
 
-| 1/VIX Z-Score | Regime      | Action Bias                    |
+| -Z(VIX)       | Regime      | Action Bias                    |
 | ------------- | ----------- | ------------------------------ |
 | > +1.5        | Complacency | Trim winners, add hedges       |
 | +0.5 to +1.5  | Risk-On     | Hold longs, tight stops        |
@@ -71,9 +71,9 @@ Signal options: STRONG BUY | BUY | ACCUMULATE | HOLD | WAIT | SELL | STRONG SELL
 ## Hard Rules
 
 - Never BUY when daily Z-score >+2
-- Never BUY when ADX >40 in downtrend (falling knife)
+- Never BUY when ADX >25 in downtrend (falling knife)
 - GLI direction sets portfolio risk bias
-- 1/VIX Z >+1.5 → always suggest hedges on overbought assets
+- -Z(VIX) >+1.5 → always suggest hedges on overbought assets
 - Extreme Fear + Z >+1.5 = WAIT for Z to reset toward 0
 
 ## Style
