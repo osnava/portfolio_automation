@@ -6,7 +6,7 @@ A Python-based technical analysis tool that provides comprehensive weekly market
 
 - **Macro Indicators**
   - Global Liquidity Index (GLI) - Fed Balance Sheet minus TGA and RRP
-  - VIX volatility tracking with inverted VIX Z-Score (market regime detection)
+  - VIX volatility tracking with negative Z-Score (market regime detection)
   - Fear & Greed Index for stocks and crypto
 
 - **Technical Analysis** (Daily & Weekly timeframes)
@@ -119,8 +119,8 @@ ASSETS = {
      12-Week: $-37.86B (-0.65%)
 
   Volatility & Regime:
-     VIX: 14.95 (Low) | 1/VIX: 0.0669
-     1/VIX Z-Score: +0.31 -> Neutral
+     VIX: 14.95 (Low)
+     -Z(VIX): +0.31 -> Neutral
 
   Sentiment:
      Fear & Greed (Stocks): 46 - Neutral
@@ -161,9 +161,9 @@ ASSETS = {
 ==========================================================================================
   QUICK REFERENCE
 ==========================================================================================
-  TREND: Up | Down | Sideways | ADX: <20 Weak, 20-40 Mod, >40 Strong
+  TREND: Up | Down | Sideways | ADX: <20 Weak, 20-25 Mod, >25 Strong
   Z-SCORE: >+2 OB | <-2 OS | >+2.5 Extreme OB | <-2.5 Extreme OS
-  1/VIX Z: >+1.5 Complacency | <-1.5 Fear | +/-0.5-1.5 Risk-On/Off
+  -Z(VIX): >+1.5 Complacency | <-1.5 Fear | +/-0.5-1.5 Risk-On/Off
   F&G: 0-25 Ext Fear | 26-45 Fear | 46-55 Neutral | 56-75 Greed | 76-100 Ext Greed
   GLI: Expanding >1% | Contracting <-1% | Flat
 ==========================================================================================
@@ -204,7 +204,7 @@ Given the script output above, an LLM with `SYSPROMPT.MD` produces:
 | --------- | ----- | ------ | ----------- |
 | GLI | $5744B (+1.68% 4wk) | Bullish | Expanding liquidity supports risk assets |
 | VIX | 14.95 | Neutral | Low vol, cheap hedges available |
-| 1/VIX Z | +0.31 | Neutral | Normal risk regime, no extremes |
+| -Z(VIX) | +0.31 | Neutral | Normal risk regime, no extremes |
 | Stock F&G | 46 | Neutral | No contrarian signal |
 | Crypto F&G | 21 | Bullish | Extreme Fear = contrarian buy zone |
 
@@ -270,9 +270,9 @@ Fed Balance Sheet    = Money the Fed has "printed" (QE)
 ## Output Legend
 
 - **Trend**: Uptrend | Downtrend | Sideways
-- **ADX**: <20 Weak | 20-40 Moderate | >40 Strong
+- **ADX**: <20 Weak | 20-25 Moderate | >25 Strong
 - **Z-Score**: >+2 Overbought | <-2 Oversold | >+2.5 Extreme OB | <-2.5 Extreme OS
-- **1/VIX Z-Score**: >+1.5 Complacency | <-1.5 Fear | +/-0.5-1.5 Risk-On/Off
+- **-Z(VIX)**: >+1.5 Complacency | <-1.5 Fear | +/-0.5-1.5 Risk-On/Off
 - **Fear & Greed**: 0-25 Extreme Fear | 26-45 Fear | 46-55 Neutral | 56-75 Greed | 76-100 Extreme Greed
 - **GLI**: Expanding >1% | Contracting <-1% | Flat
 

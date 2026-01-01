@@ -89,22 +89,22 @@ def get_vix():
 
 
 def get_vix_zscore():
-    """Fetch VIX and calculate inverted VIX z-score."""
+    """Fetch VIX and calculate negative z-score (inverted VIX)."""
     hist = yf.download("^VIX", period="3mo", interval="1d", progress=False)
     if hist.empty or len(hist) < ZSCORE_WINDOW:
-        return None, None, None
+        return None, None
 
     if isinstance(hist.columns, pd.MultiIndex):
         hist.columns = hist.columns.get_level_values(0)
 
-    vix = hist['Close'].iloc[-1]
-    inv_vix = 1 / hist['Close']
+    vix_series = hist['Close']
+    vix = vix_series.iloc[-1]
 
-    mean = inv_vix.rolling(ZSCORE_WINDOW).mean().iloc[-1]
-    std = inv_vix.rolling(ZSCORE_WINDOW).std().iloc[-1]
-    zscore = (inv_vix.iloc[-1] - mean) / std if std > 0 else 0
+    mean = vix_series.rolling(ZSCORE_WINDOW).mean().iloc[-1]
+    std = vix_series.rolling(ZSCORE_WINDOW).std().iloc[-1]
+    zscore = -((vix - mean) / std) if std > 0 else 0  # Negative z-score
 
-    return round(vix, 2), round(zscore, 2), round(inv_vix.iloc[-1], 4)
+    return round(vix, 2), round(zscore, 2)
 
 
 # ============================================================================
@@ -235,8 +235,8 @@ def detect_trend(df):
     if adx < 20:
         return "↔️ Sideways/Choppy", "Weak", round(adx, 1)
     
-    strength = "Moderate" if adx < 40 else "Strong"
-    threshold = 3 if adx < 40 else 2
+    strength = "Moderate" if adx < 25 else "Strong"
+    threshold = 3 if adx < 25 else 2
     
     if score >= threshold:
         trend = "📈 Uptrend"
@@ -311,21 +311,21 @@ def main():
     
     print("\n  Volatility & Regime:")
     try:
-        vix, inv_vix_z, inv_vix = get_vix_zscore()
+        vix, vix_z = get_vix_zscore()
         if vix:
             vix_desc = "Low" if vix < 15 else "Normal" if vix < 20 else "Elevated" if vix < 30 else "High"
-            if inv_vix_z >= 1.5:
+            if vix_z >= 1.5:
                 regime = "Complacency"
-            elif inv_vix_z <= -1.5:
+            elif vix_z <= -1.5:
                 regime = "Fear"
-            elif inv_vix_z >= 0.5:
+            elif vix_z >= 0.5:
                 regime = "Risk-On"
-            elif inv_vix_z <= -0.5:
+            elif vix_z <= -0.5:
                 regime = "Risk-Off"
             else:
                 regime = "Neutral"
-            print(f"     VIX: {vix} ({vix_desc}) | 1/VIX: {inv_vix}")
-            print(f"     1/VIX Z-Score: {inv_vix_z:+.2f} → {regime}")
+            print(f"     VIX: {vix} ({vix_desc})")
+            print(f"     -Z(VIX): {vix_z:+.2f} → {regime}")
         else:
             print("     ❌ Could not retrieve")
     except Exception:
@@ -361,9 +361,9 @@ def main():
     
     # LEGEND
     print(f"\n{'='*90}\n  📖 QUICK REFERENCE\n{'='*90}")
-    print("  TREND: 📈 Up | 📉 Down | ↔️ Sideways | ADX: <20 Weak, 20-40 Mod, >40 Strong")
+    print("  TREND: 📈 Up | 📉 Down | ↔️ Sideways | ADX: <20 Weak, 20-25 Mod, >25 Strong")
     print("  Z-SCORE: >+2 OB | <-2 OS | >+2.5 Extreme OB | <-2.5 Extreme OS")
-    print("  1/VIX Z: >+1.5 Complacency | <-1.5 Fear | ±0.5-1.5 Risk-On/Off")
+    print("  -Z(VIX): >+1.5 Complacency | <-1.5 Fear | ±0.5-1.5 Risk-On/Off")
     print("  F&G: 0-25 Ext Fear | 26-45 Fear | 46-55 Neutral | 56-75 Greed | 76-100 Ext Greed")
     print("  GLI: 📈 Expanding >1% | 📉 Contracting <-1% | ➡️ Flat")
     print("=" * 90)
