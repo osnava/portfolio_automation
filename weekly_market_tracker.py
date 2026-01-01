@@ -89,22 +89,27 @@ def get_vix():
 
 
 def get_vix_zscore():
-    """Fetch VIX and calculate negative z-score (inverted VIX)."""
+    """Fetch VIX and calculate smoothed inverted Z-score (52-day window, 5-period EMA)."""
     hist = yf.download("^VIX", period="3mo", interval="1d", progress=False)
-    if hist.empty or len(hist) < ZSCORE_WINDOW:
+    if hist.empty or len(hist) < 52:
         return None, None
 
     if isinstance(hist.columns, pd.MultiIndex):
         hist.columns = hist.columns.get_level_values(0)
 
     vix_series = hist['Close']
-    vix = vix_series.iloc[-1]
+    vix = round(vix_series.iloc[-1], 2)
 
-    mean = vix_series.rolling(ZSCORE_WINDOW).mean().iloc[-1]
-    std = vix_series.rolling(ZSCORE_WINDOW).std().iloc[-1]
-    zscore = -((vix - mean) / std) if std > 0 else 0  # Negative z-score
+    # Z-score with 52-day window
+    mean = vix_series.rolling(52).mean()
+    std = vix_series.rolling(52).std()
+    z = (vix_series - mean) / std
 
-    return round(vix, 2), round(zscore, 2)
+    # Invert and smooth with 5-period EMA
+    z_inverted = -z
+    z_smooth = z_inverted.ewm(span=5, adjust=False).mean()
+
+    return vix, round(z_smooth.iloc[-1], 2)
 
 
 # ============================================================================

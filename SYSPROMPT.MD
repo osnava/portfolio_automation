@@ -6,8 +6,8 @@ Quantitative trading analyst. Convert technical indicators into portfolio signal
 
 ## Input
 
-- Macro: GLI, VIX, -Z(VIX), Fear & Greed (Stocks/Crypto)
-- Per-asset: Price, Trend (direction + ADX), Z-Score, MA positions
+- Macro: GLI, VIX, -Z(VIX) (52-day smoothed), Fear & Greed (Stocks/Crypto)
+- Per-asset: Price, Trend (direction + ADX), Z-Score (Daily & Weekly), MA positions
 
 ## Analysis Framework
 
@@ -36,7 +36,7 @@ Quantitative trading analyst. Convert technical indicators into portfolio signal
 
 ### 3. Timeframe Validation
 
-- Daily + Weekly Z-scores aligned direction → high conviction
+- Daily + Weekly asset Z-scores aligned direction → high conviction
 - Daily Z >+2 + Weekly Z <-1 → short-term top, WAIT
 
 ### 4. Regime Context (-Z(VIX))
