@@ -5,16 +5,17 @@ A Python-based technical analysis tool that provides comprehensive weekly market
 ## Features
 
 - **Macro Indicators**
+
   - Global Liquidity Index (GLI) - Fed Balance Sheet minus TGA and RRP
   - VIX volatility tracking with negative Z-Score (market regime detection)
   - Fear & Greed Index for stocks and crypto
-
 - **Technical Analysis** (Daily & Weekly timeframes)
+
   - Trend detection using ADX and moving averages
   - Z-Score for overbought/oversold detection (20-day rolling)
   - Moving average distance analysis (20, 50, 200-day)
-
 - **Default Asset Coverage**
+
   - ETFs: ISAC, SMH, URA, ROBO, ARKQ
   - Cryptocurrencies: BTC, ETH
   - Indices: S&P 500
@@ -65,16 +66,16 @@ You can track any ticker available on Yahoo Finance. Edit the `ASSETS` dictionar
 
 ```python
 ASSETS = {
-    "ISAC": "ISAC.L",      # iShares MSCI ACWI (London)
-    "SMH": "SMH",          # VanEck Semiconductor ETF
-    "URA": "URA",          # Global X Uranium ETF
-    "ROBO": "ROBO",        # ROBO Global Robotics ETF
-    "ARKQ": "ARKQ",        # ARK Autonomous Tech ETF
-    "BTCUSD": "BTC-USD",   # Bitcoin
-    "ETHUSD": "ETH-USD",   # Ethereum
-    "SPX": "^GSPC",        # S&P 500 Index
-    "GOLD": "GC=F",        # Gold Futures
-    "SILVER": "SI=F",      # Silver Futures
+    "iShares MSCI ACWI ETF": "ISAC.L",
+    "VanEck Semiconductor ETF": "SMH",
+    "Global X Uranium ETF": "URA",
+    "ROBO Global Robotics and Automation ETF": "ROBO",
+    "ARK Autonomous Technology & Robotics ETF": "ARKQ",
+    "Bitcoin USD": "BTC-USD",
+    "Ethereum USD": "ETH-USD",
+    "S&P 500": "^GSPC",
+    "Gold Futures": "GC=F",
+    "Silver Futures": "SI=F",
 }
 ```
 
@@ -82,19 +83,20 @@ ASSETS = {
 
 ```python
 ASSETS = {
-    "AAPL": "AAPL",        # Apple
-    "MSFT": "MSFT",        # Microsoft
-    "NVDA": "NVDA",        # NVIDIA
-    "GOOGL": "GOOGL",      # Alphabet
-    "AMZN": "AMZN",        # Amazon
-    "QQQ": "QQQ",          # Nasdaq 100 ETF
-    "SPY": "SPY",          # S&P 500 ETF
-    "TLT": "TLT",          # 20+ Year Treasury Bond ETF
-    "BTCUSD": "BTC-USD",   # Bitcoin
+    "Apple": "AAPL",
+    "Microsoft": "MSFT",
+    "NVIDIA": "NVDA",
+    "Alphabet": "GOOGL",
+    "Amazon": "AMZN",
+    "Nasdaq 100 ETF": "QQQ",
+    "S&P 500 ETF": "SPY",
+    "20+ Year Treasury Bond ETF": "TLT",
+    "Bitcoin USD": "BTC-USD",
 }
 ```
 
 **Finding Yahoo Finance tickers:**
+
 - US Stocks: Use the stock symbol directly (e.g., `AAPL`, `TSLA`)
 - International: Add exchange suffix (e.g., `ISAC.L` for London, `7203.T` for Tokyo)
 - Crypto: Use format `SYMBOL-USD` (e.g., `BTC-USD`, `SOL-USD`)
@@ -200,34 +202,34 @@ Given the script output above, an LLM with `SYSPROMPT.MD` produces:
 
 **Table 1: Macro Summary**
 
-| Indicator | Value | Signal | Implication |
-| --------- | ----- | ------ | ----------- |
-| GLI | $5744B (+1.68% 4wk) | Bullish | Expanding liquidity supports risk assets |
-| VIX | 14.95 | Neutral | Low vol, cheap hedges available |
-| -Z(VIX) | +0.31 | Neutral | Normal risk regime, no extremes |
-| Stock F&G | 46 | Neutral | No contrarian signal |
-| Crypto F&G | 21 | Bullish | Extreme Fear = contrarian buy zone |
+| Indicator  | Value               | Signal  | Implication                              |
+| ---------- | ------------------- | ------- | ---------------------------------------- |
+| GLI        | $5744B (+1.68% 4wk) | Bullish | Expanding liquidity supports risk assets |
+| VIX        | 14.95               | Neutral | Low vol, cheap hedges available          |
+| -Z(VIX)    | +0.31               | Neutral | Normal risk regime, no extremes          |
+| Stock F&G  | 46                  | Neutral | No contrarian signal                     |
+| Crypto F&G | 21                  | Bullish | Extreme Fear = contrarian buy zone       |
 
 **Table 2: Ticker Signals**
 
-| Ticker | Price | Z-Score (D/W) | Signal | Key Drivers |
-| ------ | ----- | ------------- | ------ | ----------- |
-| ISAC | $109.28 | +1.40/+1.50 | HOLD | Uptrend aligned, upper zone both TFs |
-| SMH | $360.13 | +0.01/+1.01 | HOLD | Daily sideways, weekly support intact |
-| URA | $42.73 | -1.65/-0.84 | ACCUMULATE | Approaching OS, range-bound dip buy |
-| BTCUSD | $87,649 | -0.15/-1.26 | ACCUMULATE | Weekly lower + Extreme Fear = contrarian |
-| ETHUSD | $2,976 | +0.13/-1.13 | WAIT | ADX 26 downtrend, knife risk |
-| GOLD | $4,332 | +0.11/+1.08 | HOLD | Strong weekly uptrend, not OB |
-| SILVER | $70.98 | +0.95/+1.86 | HOLD | Strong trend, watch for +2 OB |
+| Ticker | Price   | Z-Score (D/W) | Signal     | Key Drivers                              |
+| ------ | ------- | ------------- | ---------- | ---------------------------------------- |
+| ISAC   | $109.28 | +1.40/+1.50   | HOLD       | Uptrend aligned, upper zone both TFs     |
+| SMH    | $360.13 | +0.01/+1.01   | HOLD       | Daily sideways, weekly support intact    |
+| URA    | $42.73  | -1.65/-0.84   | ACCUMULATE | Approaching OS, range-bound dip buy      |
+| BTCUSD | $87,649 | -0.15/-1.26   | ACCUMULATE | Weekly lower + Extreme Fear = contrarian |
+| ETHUSD | $2,976  | +0.13/-1.13   | WAIT       | ADX 26 downtrend, knife risk             |
+| GOLD   | $4,332  | +0.11/+1.08   | HOLD       | Strong weekly uptrend, not OB            |
+| SILVER | $70.98  | +0.95/+1.86   | HOLD       | Strong trend, watch for +2 OB            |
 
 **Table 3: Rebalance Actions**
 
-| Action | From | To | Rationale |
-| ------ | ---- | -- | --------- |
-| ACCUMULATE | Cash | URA | Z -1.65 lower zone, mean reversion play |
-| ACCUMULATE | Cash | BTCUSD | Weekly Z -1.26 + Crypto F&G Extreme Fear |
-| WATCH | - | SILVER | Weekly Z +1.86 nearing +2 OB threshold |
-| HEDGE | - | Portfolio | VIX 14.95 = cheap puts available |
+| Action     | From | To        | Rationale                                |
+| ---------- | ---- | --------- | ---------------------------------------- |
+| ACCUMULATE | Cash | URA       | Z -1.65 lower zone, mean reversion play  |
+| ACCUMULATE | Cash | BTCUSD    | Weekly Z -1.26 + Crypto F&G Extreme Fear |
+| WATCH      | -    | SILVER    | Weekly Z +1.86 nearing +2 OB threshold   |
+| HEDGE      | -    | Portfolio | VIX 14.95 = cheap puts available         |
 
 ## Understanding GLI (Global Liquidity Index)
 
@@ -237,11 +239,11 @@ The GLI measures actual money available in the financial system using Fed data.
 
 ### Components
 
-| Term | FRED Code | Full Name | Description |
-|------|-----------|-----------|-------------|
-| **Fed BS** | `WALCL` | Fed Total Assets | Total assets held by the Federal Reserve |
-| **TGA** | `WTREGEN` | Treasury General Account | US Treasury's checking account at the Fed |
-| **RRP** | `RRPONTSYD` | Reverse Repo | Cash parked at the Fed by money market funds |
+| Term             | FRED Code     | Full Name                | Description                                  |
+| ---------------- | ------------- | ------------------------ | -------------------------------------------- |
+| **Fed BS** | `WALCL`     | Fed Total Assets         | Total assets held by the Federal Reserve     |
+| **TGA**    | `WTREGEN`   | Treasury General Account | US Treasury's checking account at the Fed    |
+| **RRP**    | `RRPONTSYD` | Reverse Repo             | Cash parked at the Fed by money market funds |
 
 ### Why Subtract TGA and RRP?
 
@@ -255,11 +257,11 @@ Fed Balance Sheet    = Money the Fed has "printed" (QE)
 
 ### Market Effects
 
-| Component | When It Rises | Market Effect |
-|-----------|---------------|---------------|
-| **Fed BS** | QE / asset purchases | Bullish (more liquidity) |
-| **TGA** | Treasury accumulates cash | Bearish (drains liquidity) |
-| **RRP** | Excess cash parked at Fed | Bearish (drains liquidity) |
+| Component        | When It Rises             | Market Effect              |
+| ---------------- | ------------------------- | -------------------------- |
+| **Fed BS** | QE / asset purchases      | Bullish (more liquidity)   |
+| **TGA**    | Treasury accumulates cash | Bearish (drains liquidity) |
+| **RRP**    | Excess cash parked at Fed | Bearish (drains liquidity) |
 
 ### Interpreting GLI Trends
 

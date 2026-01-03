@@ -26,16 +26,16 @@ if not FRED_API_KEY:
     raise ValueError("FRED_API_KEY environment variable is not set. Please check your .env file.")
 
 ASSETS = {
-    "ISAC": "ISAC.L",
-    "SMH": "SMH",
-    "URA": "URA",
-    "ROBO": "ROBO",
-    "ARKQ": "ARKQ",
-    "BTCUSD": "BTC-USD",
-    "ETHUSD": "ETH-USD",
-    "SPX": "^GSPC",
-    "GOLD": "GC=F",
-    "SILVER": "SI=F",
+    "iShares MSCI ACWI ETF": "ISAC.L",
+    "VanEck Semiconductor ETF": "SMH",
+    "Global X Uranium ETF": "URA",
+    "ROBO Global Robotics and Automation ETF": "ROBO",
+    "ARK Autonomous Technology & Robotics ETF": "ARKQ",
+    "Bitcoin USD": "BTC-USD",
+    "Ethereum USD": "ETH-USD",
+    "S&P 500": "^GSPC",
+    "Gold Futures": "GC=F",
+    "Silver Futures": "SI=F",
 }
 
 MA_PERIODS = [20, 50, 200]
