@@ -1,6 +1,3 @@
-#!/usr/bin/env python3
-"""Weekly Market Analysis Tracker"""
-
 import os
 import warnings
 from datetime import datetime
@@ -11,6 +8,8 @@ import requests
 import yfinance as yf
 from dotenv import load_dotenv
 from ta.trend import ADXIndicator
+from google.colab import userdata
+userdata.get('FRED_API_KEY')
 
 warnings.filterwarnings('ignore')
 
@@ -19,7 +18,7 @@ load_dotenv()
 
 # CONFIGURATION
 
-FRED_API_KEY = os.getenv("FRED_API_KEY")
+FRED_API_KEY = os.getenv("FRED_API_KEY") or userdata.get('FRED_API_KEY')
 if not FRED_API_KEY:
     raise ValueError("FRED_API_KEY environment variable is not set. Please check your .env file.")
 
