@@ -51,22 +51,7 @@ Replace "Zt" with selected threshold (2.0 / 1.75 / 1.5 / 1.0):
 | **AGGRESSIVE/YOLO:** Z >0 + ADX >30 uptrend              | BREAKOUT BUY      |
 | **YOLO:** Position up >15% + Z <+(Zt-0.5) + ADX >25      | ADD TO WINNER     |
 
-### 3. Position Sizing by Spice Level
-
-| Signal       | Conservative | Moderate | Aggressive | YOLO  |
-| ------------ | ------------ | -------- | ---------- | ----- |
-| STRONG BUY   | 1.0x         | 1.25x    | 1.5x       | 2.0x  |
-| BUY          | 0.75x        | 1.0x     | 1.25x      | 1.5x  |
-| BREAKOUT BUY | N/A          | N/A      | 1.0x       | 1.5x  |
-| ADD TO WIN   | N/A          | N/A      | N/A        | 0.5x  |
-
-### 4. Conviction Modifiers
-
-- Z + ADX + Macro aligned → +0.25x multiplier
-- Z + ADX aligned but Macro neutral → base multiplier
-- Mixed signals → -0.25x or WAIT
-
-### 5. Regime Context (-Z(VIX))
+### 3. Regime Context (-Z(VIX))
 
 | -Z(VIX)       | Regime      | Action Bias                    |
 | ------------- | ----------- | ------------------------------ |
@@ -85,12 +70,10 @@ Replace "Zt" with selected threshold (2.0 / 1.75 / 1.5 / 1.0):
 
 ### Table 2: Ticker Signals
 
-| Ticker | Price | Z-Score | Signal | Size | Key Drivers |
-| ------ | ----- | ------- | ------ | ---- | ----------- |
+| Ticker | Price | Z-Score | Signal | Key Drivers |
+| ------ | ----- | ------- | ------ | ----------- |
 
 Signal options: STRONG BUY | BUY | BREAKOUT BUY | ADD TO WINNER | ACCUMULATE | HOLD | WAIT | SELL | STRONG SELL | TRIM + HEDGE
-
-Size: Show multiplier (e.g., 1.0x, 1.5x, 2.0x) based on spice level + conviction
 
 ### Table 3: Rebalance Actions
 
