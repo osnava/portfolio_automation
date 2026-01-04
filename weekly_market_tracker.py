@@ -17,9 +17,7 @@ warnings.filterwarnings('ignore')
 # Load environment variables from .env file
 load_dotenv()
 
-# ============================================================================
 # CONFIGURATION
-# ============================================================================
 
 FRED_API_KEY = os.getenv("FRED_API_KEY")
 if not FRED_API_KEY:
@@ -31,6 +29,7 @@ ASSETS = {
     "Global X Uranium ETF": "URA",
     "ROBO Global Robotics and Automation ETF": "ROBO",
     "ARK Autonomous Technology & Robotics ETF": "ARKQ",
+    "Palantir Technologies Inc." : "PLTR",
     "Bitcoin USD": "BTC-USD",
     "Ethereum USD": "ETH-USD",
     "S&P 500": "^GSPC",
@@ -41,9 +40,7 @@ ASSETS = {
 MA_PERIODS = [20, 50, 200]
 ZSCORE_WINDOW = 20
 
-# ============================================================================
 # DATA FETCHING
-# ============================================================================
 
 def get_fred_series(series_id, limit=1):
     """Fetch values from FRED API."""
@@ -82,14 +79,8 @@ def get_fear_greed_crypto():
     return int(data['value']), data['value_classification'].title()
 
 
-def get_vix():
-    """Fetch current VIX value."""
-    hist = yf.Ticker("^VIX").history(period="5d")
-    return round(hist['Close'].iloc[-1], 2) if not hist.empty else None
-
-
 def get_vix_zscore():
-    """Fetch VIX and calculate smoothed inverted Z-score (52-day window, 5-period EMA)."""
+    """Fetch VIX and calculate smoothed inverted Z-score (52-week rolling window, 5-period EMA)."""
     hist = yf.download("^VIX", period="3mo", interval="1d", progress=False)
     if hist.empty or len(hist) < 52:
         return None, None
@@ -112,9 +103,7 @@ def get_vix_zscore():
     return vix, round(z_smooth.iloc[-1], 2)
 
 
-# ============================================================================
 # GLI CALCULATION
-# ============================================================================
 
 def calculate_gli():
     """Calculate Global Liquidity Index: Fed Balance Sheet - TGA - RRP."""
@@ -165,9 +154,7 @@ def calculate_gli():
     }
 
 
-# ============================================================================
 # TECHNICAL ANALYSIS
-# ============================================================================
 
 def calculate_zscore(close, window=ZSCORE_WINDOW):
     """Calculate z-score for price series."""
@@ -180,24 +167,20 @@ def calculate_zscore(close, window=ZSCORE_WINDOW):
     if std == 0 or np.isnan(std):
         return 0, "Neutral"
 
-    zscore = (close.iloc[-1] - mean) / std
-    zscore = round(zscore, 2)
+    zscore = round((close.iloc[-1] - mean) / std, 2)
 
-    if zscore >= 2.5:
-        zone = "Extreme OB"
-    elif zscore >= 2:
-        zone = "Overbought"
-    elif zscore >= 1:
-        zone = "Upper"
-    elif zscore <= -2.5:
-        zone = "Extreme OS"
-    elif zscore <= -2:
-        zone = "Oversold"
-    elif zscore <= -1:
-        zone = "Lower"
-    else:
-        zone = "Neutral"
+    # Classify zone using threshold ranges
+    zones = [
+        (2.5, float('inf'), "Extreme OB"),
+        (2, 2.5, "Overbought"),
+        (1, 2, "Upper"),
+        (-1, 1, "Neutral"),
+        (-2, -1, "Lower"),
+        (-2.5, -2, "Oversold"),
+        (float('-inf'), -2.5, "Extreme OS"),
+    ]
 
+    zone = next((z for low, high, z in zones if low <= zscore < high), "Neutral")
     return zscore, zone
 
 
@@ -209,7 +192,7 @@ def format_ma_distance(close, price, periods):
             ma = close.rolling(p).mean().iloc[-1]
             pct = ((price - ma) / ma) * 100
             parts.append(f"MA{p}: {abs(pct):.1f}%{'↑' if pct > 0 else '↓'}")
-    return " | ".join(parts) or "N/A"
+    return " | ".join(parts) if parts else "N/A"
 
 
 def detect_trend(df):
@@ -254,7 +237,7 @@ def detect_trend(df):
 
 
 def calculate_technicals(ticker):
-    """Calculate all technical indicators for an asset."""
+    """Calculate technical indicators using weekly timeframe only."""
     data = yf.download(ticker, period="1y", interval="1d", progress=False)
     if data.empty:
         return None
@@ -262,36 +245,75 @@ def calculate_technicals(ticker):
     if isinstance(data.columns, pd.MultiIndex):
         data.columns = data.columns.get_level_values(0)
 
-    close = data['Close']
+    # Get current price from daily close
+    price = data['Close'].iloc[-1]
 
-    def get_indicators(df, close_col):
-        zscore, zone = calculate_zscore(close_col)
-        return {
-            'zscore': zscore,
-            'zscore_zone': zone,
-            'ma_distance': format_ma_distance(close_col, close_col.iloc[-1], MA_PERIODS),
-        }
-
-    daily = get_indicators(data, close)
-    daily['trend'], daily['trend_strength'], daily['adx'] = detect_trend(data)
-
+    # Resample to weekly
     weekly_df = data.resample('W').agg({
         'Open': 'first', 'High': 'max', 'Low': 'min', 'Close': 'last', 'Volume': 'sum'
     }).dropna()
 
-    if len(weekly_df) >= 26:
-        weekly = get_indicators(weekly_df, weekly_df['Close'])
-        weekly['trend'], weekly['trend_strength'], weekly['adx'] = detect_trend(weekly_df) if len(weekly_df) >= 50 else ("Insufficient Data", "N/A", None)
+    if len(weekly_df) < 26:
+        return {
+            'price': price,
+            'zscore': None,
+            'zscore_zone': 'N/A',
+            'ma_distance': 'N/A',
+            'trend': 'Insufficient Data',
+            'trend_strength': 'N/A',
+            'adx': None
+        }
+
+    # Calculate indicators on weekly data
+    close_weekly = weekly_df['Close']
+    zscore, zone = calculate_zscore(close_weekly)
+    ma_distance = format_ma_distance(close_weekly, price, MA_PERIODS)
+
+    if len(weekly_df) >= 50:
+        trend, trend_strength, adx = detect_trend(weekly_df)
     else:
-        weekly = {'zscore': None, 'zscore_zone': 'N/A', 'ma_distance': 'N/A', 'trend': 'Insufficient Data', 'trend_strength': 'N/A', 'adx': None}
+        trend, trend_strength, adx = "Insufficient Data", "N/A", None
 
-    return {'price': close.iloc[-1], 'daily': daily, 'weekly': weekly}
+    return {
+        'price': price,
+        'zscore': zscore,
+        'zscore_zone': zone,
+        'ma_distance': ma_distance,
+        'trend': trend,
+        'trend_strength': trend_strength,
+        'adx': adx
+    }
 
 
-# ============================================================================
+# HELPERS
+
+def safe_execute(func, error_msg="❌ Could not retrieve"):
+    """Execute function and return result or error message."""
+    try:
+        return func()
+    except Exception:
+        return error_msg
+
+
+def get_regime_from_vix_z(vix_z):
+    """Map VIX Z-score to market regime."""
+    if vix_z >= 1.5:
+        return "Complacency"
+    elif vix_z <= -1.5:
+        return "Fear"
+    elif vix_z >= 0.5:
+        return "Risk-On"
+    elif vix_z <= -0.5:
+        return "Risk-Off"
+    return "Neutral"
+
+
+def format_sign(value):
+    """Format number with + or - sign."""
+    return f"{'+' if value >= 0 else ''}{value}"
+
+
 # MAIN
-# ============================================================================
-
 
 def main():
     print(f"\n{'='*90}\n  📊 WEEKLY MARKET ANALYSIS - {datetime.now().strftime('%A, %Y-%m-%d %H:%M')}\n{'='*90}")
@@ -308,7 +330,7 @@ def main():
                                    ("4-Week", gli['mom_change'], gli['mom_pct']),
                                    ("12-Week", gli['qoq_change'], gli['qoq_pct'])]:
                 if pct is not None:
-                    print(f"     {lbl}: {'+' if chg >= 0 else ''}${chg}B ({'+' if chg >= 0 else ''}{pct}%)")
+                    print(f"     {lbl}: {format_sign(chg)}B ({format_sign(pct)}%)")
         else:
             print("     ❌ Could not retrieve")
     except Exception:
@@ -318,19 +340,10 @@ def main():
     try:
         vix, vix_z = get_vix_zscore()
         if vix:
-            vix_desc = "Low" if vix < 15 else "Normal" if vix < 20 else "Elevated" if vix < 30 else "High"
-            if vix_z >= 1.5:
-                regime = "Complacency"
-            elif vix_z <= -1.5:
-                regime = "Fear"
-            elif vix_z >= 0.5:
-                regime = "Risk-On"
-            elif vix_z <= -0.5:
-                regime = "Risk-Off"
-            else:
-                regime = "Neutral"
+            vix_levels = [(15, "Low"), (20, "Normal"), (30, "Elevated"), (float('inf'), "High")]
+            vix_desc = next(desc for threshold, desc in vix_levels if vix < threshold)
             print(f"     VIX: {vix} ({vix_desc})")
-            print(f"     -Z(VIX): {vix_z:+.2f} → {regime}")
+            print(f"     -Z(VIX): {vix_z:+.2f} → {get_regime_from_vix_z(vix_z)}")
         else:
             print("     ❌ Could not retrieve")
     except Exception:
@@ -349,16 +362,14 @@ def main():
     
     for name, ticker in ASSETS.items():
         print(f"\n{'─'*90}\n  {name} ({ticker})\n{'─'*90}")
-        
+
         try:
             if tech := calculate_technicals(ticker):
                 print(f"\n  💰 ${tech['price']:,.2f}" if tech['price'] > 1 else f"\n  💰 ${tech['price']:.6f}")
-                for tf, icon in [('daily', '📅'), ('weekly', '📆')]:
-                    d = tech[tf]
-                    print(f"\n  {icon} {tf.upper()}: {d['trend']} ({d['trend_strength']}, ADX: {d['adx']})")
-                    z_display = f"{d['zscore']:+.2f}" if d['zscore'] is not None else "N/A"
-                    print(f"     Z-Score: {z_display} ({d['zscore_zone']})")
-                    print(f"     MAs: {d['ma_distance']}")
+                print(f"\n  📆 WEEKLY: {tech['trend']} ({tech['trend_strength']}, ADX: {tech['adx']})")
+                z_display = f"{tech['zscore']:+.2f}" if tech['zscore'] is not None else "N/A"
+                print(f"     Z-Score: {z_display} ({tech['zscore_zone']})")
+                print(f"     MAs: {tech['ma_distance']}")
             else:
                 print("  ❌ Could not retrieve")
         except Exception:
@@ -366,8 +377,9 @@ def main():
     
     # LEGEND
     print(f"\n{'='*90}\n  📖 QUICK REFERENCE\n{'='*90}")
+    print("  📆 ALL ANALYSIS USES WEEKLY TIMEFRAME")
     print("  TREND: 📈 Up | 📉 Down | ↔️ Sideways | ADX: <20 Weak, 20-25 Mod, >25 Strong")
-    print("  Z-SCORE: >+2 OB | <-2 OS | >+2.5 Extreme OB | <-2.5 Extreme OS")
+    print("  WEEKLY Z-SCORE: >+2 OB | <-2 OS | >+2.5 Extreme OB | <-2.5 Extreme OS")
     print("  -Z(VIX): >+1.5 Complacency | <-1.5 Fear | ±0.5-1.5 Risk-On/Off")
     print("  F&G: 0-25 Ext Fear | 26-45 Fear | 46-55 Neutral | 56-75 Greed | 76-100 Ext Greed")
     print("  GLI: 📈 Expanding >1% | 📉 Contracting <-1% | ➡️ Flat")
