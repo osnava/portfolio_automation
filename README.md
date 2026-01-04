@@ -1,25 +1,25 @@
-# Weekly Market Analysis Tracker
+# Quantitative Market Analysis Framework
 
-A Python-based technical analysis tool that provides comprehensive weekly market reports combining macro indicators and technical analysis for multiple asset classes.
+A systematic approach to multi-asset analysis combining macro liquidity metrics, volatility regime detection, and statistical technical indicators across equities, cryptocurrencies, and commodities.
 
-## Features
+## Methodology
 
-- **Macro Indicators**
+- **Macro Liquidity Metrics**
 
-  - Global Liquidity Index (GLI) - Fed Balance Sheet minus TGA and RRP
-  - VIX volatility tracking with negative Z-Score (market regime detection)
-  - Fear & Greed Index for stocks and crypto
-- **Technical Analysis** (Daily & Weekly timeframes)
+  - Global Liquidity Index (GLI) - Net Fed liquidity after TGA and RRP adjustments
+  - VIX volatility regime classification via normalized Z-Score transformation
+  - Sentiment indicators (Fear & Greed indices) for mean reversion signals
+- **Statistical Technical Analysis** (Dual-timeframe: Daily & Weekly)
 
-  - Trend detection using ADX and moving averages
-  - Z-Score for overbought/oversold detection (20-day rolling)
-  - Moving average distance analysis (20, 50, 200-day)
-- **Default Asset Coverage**
+  - Directional Movement Index (ADX) for trend strength quantification
+  - Rolling Z-Score (20-period) for statistical overbought/oversold levels
+  - Moving average distance metrics (20/50/200-period) for trend confirmation
+- **Universe Coverage**
 
-  - ETFs: ISAC, SMH, URA, ROBO, ARKQ
-  - Cryptocurrencies: BTC, ETH
-  - Indices: S&P 500
-  - Commodities: Gold, Silver
+  - Equity ETFs: ISAC, SMH, URA, ROBO, ARKQ
+  - Digital Assets: BTC, ETH
+  - Benchmark Indices: S&P 500
+  - Precious Metals: Gold, Silver futures
 
 ## Installation
 
@@ -52,17 +52,17 @@ pip install -r requirements.txt
    FRED_API_KEY=your_api_key_here
    ```
 
-## Usage
+## Execution
 
-Run the weekly market analysis:
+Execute systematic analysis routine:
 
 ```bash
 python weekly_market_tracker.py
 ```
 
-### Custom Tickers
+### Portfolio Customization
 
-You can track any ticker available on Yahoo Finance. Edit the `ASSETS` dictionary in `weekly_market_tracker.py`:
+Configure universe constituents via the `ASSETS` dictionary in `weekly_market_tracker.py` (supports all Yahoo Finance tickers):
 
 ```python
 ASSETS = {
@@ -79,7 +79,7 @@ ASSETS = {
 }
 ```
 
-**Example custom portfolio (tech-focused):**
+**Alternative universe specification (technology sector concentration):**
 
 ```python
 ASSETS = {
@@ -95,13 +95,13 @@ ASSETS = {
 }
 ```
 
-**Finding Yahoo Finance tickers:**
+**Ticker convention reference:**
 
-- US Stocks: Use the stock symbol directly (e.g., `AAPL`, `TSLA`)
-- International: Add exchange suffix (e.g., `ISAC.L` for London, `7203.T` for Tokyo)
-- Crypto: Use format `SYMBOL-USD` (e.g., `BTC-USD`, `SOL-USD`)
-- Indices: Use caret prefix (e.g., `^GSPC`, `^DJI`, `^IXIC`)
-- Futures: Use format `SYMBOL=F` (e.g., `GC=F`, `CL=F`)
+- US Equities: Direct symbol notation (`AAPL`, `TSLA`)
+- International Equities: Exchange-suffixed format (`ISAC.L` for LSE, `7203.T` for TSE)
+- Digital Assets: USD pair notation (`BTC-USD`, `SOL-USD`)
+- Benchmark Indices: Caret prefix (`^GSPC`, `^DJI`, `^IXIC`)
+- Futures Contracts: Continuous contract notation (`GC=F`, `CL=F`)
 
 ## Example Output
 
@@ -171,14 +171,14 @@ ASSETS = {
 ==========================================================================================
 ```
 
-## AI-Powered Analysis
+## LLM-Enhanced Signal Generation
 
-For deeper portfolio rebalancing insights, feed the script output to an LLM using the provided `SYSPROMPT.MD`:
+Augment quantitative signals with qualitative factor analysis by integrating output with large language models configured via `SYSPROMPT.MD`:
 
-1. Run the script and copy the output
-2. Use the system prompt from `SYSPROMPT.MD` with one of the recommended LLMs below
-3. **Enable extended thinking/reasoning mode** for best analysis quality
-4. Get actionable portfolio signals and rebalancing recommendations
+1. Execute analysis routine and capture output
+2. Configure LLM with system prompt from `SYSPROMPT.MD`
+3. **Enable extended reasoning mode** for optimal inference quality
+4. Extract actionable alpha signals and portfolio rebalancing recommendations
 
 ### Recommended Models (as of Dec 2025)
 
@@ -196,46 +196,46 @@ For deeper portfolio rebalancing insights, feed the script output to an LLM usin
 - **Llama 3.3 70B** - Meta's latest, clean controllable output
 - **Mistral Large 2** - 123B params, near-GPT-4 performance, efficient
 
-### Example LLM Output
+### Sample Signal Output
 
-Given the script output above, an LLM with `SYSPROMPT.MD` produces:
+Representative LLM-generated analysis using `SYSPROMPT.MD` configuration:
 
-**Table 1: Macro Summary**
+**Table 1: Macro Regime Assessment**
 
-| Indicator  | Value               | Signal  | Implication                              |
-| ---------- | ------------------- | ------- | ---------------------------------------- |
-| GLI        | $5744B (+1.68% 4wk) | Bullish | Expanding liquidity supports risk assets |
-| VIX        | 14.95               | Neutral | Low vol, cheap hedges available          |
-| -Z(VIX)    | +0.31               | Neutral | Normal risk regime, no extremes          |
-| Stock F&G  | 46                  | Neutral | No contrarian signal                     |
-| Crypto F&G | 21                  | Bullish | Extreme Fear = contrarian buy zone       |
+| Indicator  | Value               | Signal  | Directional Bias                               |
+| ---------- | ------------------- | ------- | ---------------------------------------------- |
+| GLI        | $5744B (+1.68% 4wk) | Long    | Expanding liquidity favors risk-on positioning |
+| VIX        | 14.95               | Neutral | Low implied vol, favorable hedge cost          |
+| -Z(VIX)    | +0.31               | Neutral | No regime extreme detected                     |
+| Stock F&G  | 46                  | Neutral | No contrarian conviction signal                |
+| Crypto F&G | 21                  | Long    | Extreme fear zone, contrarian entry            |
 
-**Table 2: Ticker Signals**
+**Table 2: Security-Level Signals**
 
-| Ticker | Price   | Z-Score (D/W) | Signal     | Key Drivers                              |
-| ------ | ------- | ------------- | ---------- | ---------------------------------------- |
-| ISAC   | $109.28 | +1.40/+1.50   | HOLD       | Uptrend aligned, upper zone both TFs     |
-| SMH    | $360.13 | +0.01/+1.01   | HOLD       | Daily sideways, weekly support intact    |
-| URA    | $42.73  | -1.65/-0.84   | ACCUMULATE | Approaching OS, range-bound dip buy      |
-| BTCUSD | $87,649 | -0.15/-1.26   | ACCUMULATE | Weekly lower + Extreme Fear = contrarian |
-| ETHUSD | $2,976  | +0.13/-1.13   | WAIT       | ADX 26 downtrend, knife risk             |
-| GOLD   | $4,332  | +0.11/+1.08   | HOLD       | Strong weekly uptrend, not OB            |
-| SILVER | $70.98  | +0.95/+1.86   | HOLD       | Strong trend, watch for +2 OB            |
+| Ticker | Price   | Z-Score (D/W) | Position   | Technical Thesis                          |
+| ------ | ------- | ------------- | ---------- | ----------------------------------------- |
+| ISAC   | $109.28 | +1.40/+1.50   | Hold       | Dual-TF uptrend, elevated but not extreme |
+| SMH    | $360.13 | +0.01/+1.01   | Hold       | Daily consolidation, weekly structure intact |
+| URA    | $42.73  | -1.65/-0.84   | Accumulate | Statistical oversold, mean reversion setup |
+| BTCUSD | $87,649 | -0.15/-1.26   | Accumulate | Weekly Z-score + sentiment divergence     |
+| ETHUSD | $2,976  | +0.13/-1.13   | Avoid      | ADX 26 downtrend, momentum unfavorable    |
+| GOLD   | $4,332  | +0.11/+1.08   | Hold       | Strong weekly trend, not extended         |
+| SILVER | $70.98  | +0.95/+1.86   | Hold       | Monitor for +2σ threshold breach          |
 
-**Table 3: Rebalance Actions**
+**Table 3: Portfolio Action Items**
 
-| Action     | From | To        | Rationale                                |
-| ---------- | ---- | --------- | ---------------------------------------- |
-| ACCUMULATE | Cash | URA       | Z -1.65 lower zone, mean reversion play  |
-| ACCUMULATE | Cash | BTCUSD    | Weekly Z -1.26 + Crypto F&G Extreme Fear |
-| WATCH      | -    | SILVER    | Weekly Z +1.86 nearing +2 OB threshold   |
-| HEDGE      | -    | Portfolio | VIX 14.95 = cheap puts available         |
+| Action     | From | To        | Quantitative Rationale                         |
+| ---------- | ---- | --------- | ---------------------------------------------- |
+| Accumulate | Cash | URA       | Z-score -1.65, mean reversion probability high |
+| Accumulate | Cash | BTCUSD    | Weekly Z -1.26 + sentiment extreme divergence  |
+| Monitor    | -    | SILVER    | Weekly Z +1.86 approaching +2σ overextension   |
+| Hedge      | -    | Portfolio | VIX 14.95 implies attractive put premium       |
 
-## Understanding GLI (Global Liquidity Index)
+## Global Liquidity Index (GLI) Methodology
 
-The GLI measures actual money available in the financial system using Fed data.
+Quantifies net dollar liquidity circulating in financial markets via Federal Reserve system accounts.
 
-**Formula:** `GLI = Fed Balance Sheet - TGA - RRP`
+**Calculation:** `GLI = Fed Balance Sheet - TGA - RRP`
 
 ### Components
 
@@ -245,49 +245,49 @@ The GLI measures actual money available in the financial system using Fed data.
 | **TGA**    | `WTREGEN`   | Treasury General Account | US Treasury's checking account at the Fed    |
 | **RRP**    | `RRPONTSYD` | Reverse Repo             | Cash parked at the Fed by money market funds |
 
-### Why Subtract TGA and RRP?
+### Liquidity Accounting Framework
 
 ```
-Fed Balance Sheet    = Money the Fed has "printed" (QE)
-- TGA                = Money sitting idle at Treasury (not circulating)
-- RRP                = Money parked at Fed overnight (not circulating)
+Fed Balance Sheet    = Gross liquidity injection (QE programs)
+- TGA                = Funds sequestered in Treasury account (non-circulating)
+- RRP                = Overnight sterilization facility (non-circulating)
 ────────────────────────────────────────────────────────────────────
-= Net Liquidity      = Actual money available in financial system
+= Net Liquidity      = Available liquidity in financial system
 ```
 
-### Market Effects
+### Component Price Impact
 
-| Component        | When It Rises             | Market Effect              |
-| ---------------- | ------------------------- | -------------------------- |
-| **Fed BS** | QE / asset purchases      | Bullish (more liquidity)   |
-| **TGA**    | Treasury accumulates cash | Bearish (drains liquidity) |
-| **RRP**    | Excess cash parked at Fed | Bearish (drains liquidity) |
+| Component  | Marginal Change           | Directional Effect                  |
+| ---------- | ------------------------- | ----------------------------------- |
+| **Fed BS** | QE / asset purchases      | Positive (liquidity injection)      |
+| **TGA**    | Treasury cash accumulation | Negative (liquidity drain)          |
+| **RRP**    | Excess reserve parking    | Negative (sterilizes bank reserves) |
 
-### Interpreting GLI Trends
+### Signal Interpretation
 
-- **Expanding** (+1% over 4 weeks): More dollars chasing assets, bullish for risk assets
-- **Contracting** (-1% over 4 weeks): Less liquidity, bearish, risk-off environment
-- **Correlation**: GLI historically correlates with BTC, stocks, and risk assets
+- **Expanding** (+1% over 4-weeks): Net liquidity growth, positive for risk asset beta
+- **Contracting** (-1% over 4-weeks): Liquidity withdrawal, risk-off regime likely
+- **Empirical correlation**: GLI exhibits positive correlation with BTC, equities, and risk proxies
 
-## Output Legend
+## Signal Interpretation Guide
 
-- **Trend**: Uptrend | Downtrend | Sideways
-- **ADX**: <20 Weak | 20-25 Moderate | >25 Strong
-- **Z-Score**: >+2 Overbought | <-2 Oversold | >+2.5 Extreme OB | <-2.5 Extreme OS
-- **-Z(VIX)**: >+1.5 Complacency | <-1.5 Fear | +/-0.5-1.5 Risk-On/Off
-- **Fear & Greed**: 0-25 Extreme Fear | 26-45 Fear | 46-55 Neutral | 56-75 Greed | 76-100 Extreme Greed
-- **GLI**: Expanding >1% | Contracting <-1% | Flat
+- **Trend Classification**: Uptrend | Downtrend | Consolidation
+- **ADX (Directional Strength)**: <20 Weak trend | 20-25 Moderate | >25 Strong
+- **Z-Score (Price Deviation)**: >+2 Statistical OB | <-2 Statistical OS | >+2.5 Extreme | <-2.5 Extreme
+- **-Z(VIX) Regime**: >+1.5 Complacency | <-1.5 Elevated fear | +/-0.5-1.5 Transitional
+- **Sentiment Index**: 0-25 Extreme Fear | 26-45 Fear | 46-55 Neutral | 56-75 Greed | 76-100 Extreme Greed
+- **GLI Trend**: Expanding >1% | Contracting <-1% | Neutral
 
-## Dependencies
+## Technical Stack
 
-- yfinance - Market data retrieval
-- pandas - Data manipulation
-- numpy - Numerical operations
-- ta - Technical analysis indicators (ADX)
-- requests - API calls
-- python-dotenv - Environment variable management
-- fear-and-greed - CNN Fear & Greed Index
+- **yfinance** - Yahoo Finance market data API wrapper
+- **pandas** - Time series data structures and analysis
+- **numpy** - Vectorized numerical computation
+- **ta** - Technical indicator library (ADX, moving averages)
+- **requests** - HTTP client for FRED API integration
+- **python-dotenv** - Environment configuration management
+- **fear-and-greed** - CNN sentiment index data retrieval
 
 ## License
 
-MIT License - feel free to use and modify for personal or commercial use.
+MIT License - Open source for research, personal, and commercial applications.
