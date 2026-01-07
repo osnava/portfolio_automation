@@ -13,7 +13,6 @@ Before analysis, present this selection:
 1. 🥛 **CONSERVATIVE** (Z ±2.0) - Fewest signals, highest conviction, strict filters
 2. 📊 **MODERATE** (Z ±1.75) - Research-backed sweet spot, balanced risk/reward
 3. 🌶️ **AGGRESSIVE** (Z ±1.5) - More signals, momentum plays enabled, earlier entries
-4. 🔥 **YOLO** (Z ±1.0) - Maximum signals, trend-following primary, 2x sizing enabled
 
 User selects ONE level. Apply corresponding thresholds throughout analysis.
 
@@ -36,7 +35,7 @@ User selects ONE level. Apply corresponding thresholds throughout analysis.
 
 ### 2. Signal Rules (Apply Selected Z-Score Threshold)
 
-Replace "Zt" with selected threshold (2.0 / 1.75 / 1.5 / 1.0):
+Replace "Zt" with selected threshold (2.0 / 1.75 / 1.5):
 
 | Condition                                                | Signal            |
 | -------------------------------------------------------- | ----------------- |
@@ -44,12 +43,10 @@ Replace "Zt" with selected threshold (2.0 / 1.75 / 1.5 / 1.0):
 | Z <-Zt + ADX >20 uptrend                                 | BUY               |
 | Z >+Zt + weak trend (ADX <20)                            | SELL              |
 | Z >+(Zt+0.5) OR (Z >+Zt + -Z(VIX) >+1.5)                 | STRONG SELL       |
-| Z <-Zt + ADX >25 downtrend                               | WAIT (knife)      |
-| Extreme Fear + Z >+(Zt-0.5)                              | WAIT (trap)       |
-| Sideways + ADX <15 + Z between -(Zt-1) and +(Zt-1)      | HOLD              |
-| GLI expanding + -Z(VIX) >+1.5 + Z >+Zt                   | TRIM + HEDGE      |
-| **AGGRESSIVE/YOLO:** Z >0 + ADX >30 uptrend              | BREAKOUT BUY      |
-| **YOLO:** Position up >15% + Z <+(Zt-0.5) + ADX >25      | ADD TO WINNER     |
+| Z <-Zt + ADX >25 downtrend                               | WAIT              |
+| Extreme Fear + Z >+(Zt-0.5)                              | WAIT              |
+| Sideways + ADX <15 + Z between -(Zt-1) and +(Zt-1)      | WAIT              |
+| GLI expanding + -Z(VIX) >+1.5 + Z >+Zt                   | SELL              |
 
 ### 3. Regime Context (-Z(VIX))
 
@@ -73,7 +70,7 @@ Replace "Zt" with selected threshold (2.0 / 1.75 / 1.5 / 1.0):
 | Ticker | Price | Z-Score | Signal | Key Drivers |
 | ------ | ----- | ------- | ------ | ----------- |
 
-Signal options: STRONG BUY | BUY | BREAKOUT BUY | ADD TO WINNER | ACCUMULATE | HOLD | WAIT | SELL | STRONG SELL | TRIM + HEDGE
+Signal options: STRONG BUY | BUY | WAIT | SELL | STRONG SELL
 
 ### Table 3: Rebalance Actions
 
@@ -85,22 +82,15 @@ Signal options: STRONG BUY | BUY | BREAKOUT BUY | ADD TO WINNER | ACCUMULATE | H
 **CONSERVATIVE/MODERATE:**
 - Never BUY when Z >+Zt
 - Never BUY when ADX >25 in downtrend (falling knife)
-- -Z(VIX) >+1.5 → always suggest hedges on overbought assets
 - Extreme Fear + Z >+(Zt-0.5) = WAIT for Z to reset
 
 **AGGRESSIVE:**
-- Never BUY when Z >+(Zt+0.5) UNLESS breakout signal active
+- Never BUY when Z >+(Zt+0.5)
 - Falling knife allowed if Z <-2.5 AND -Z(VIX) <-1.5
-- -Z(VIX) >+2 → mandatory hedge/trim
-
-**YOLO:**
-- Breakouts allowed at any Z if ADX >30
-- Falling knives allowed if -Z(VIX) <-1.5
-- YOLO signals: max 1 per week, max 10% portfolio
 
 **ALL LEVELS:**
 - GLI direction sets portfolio risk bias
-- GLI contracting <-2% → reduce all momentum plays by 50%
+- GLI contracting <-2% → reduce exposure to high-momentum assets
 
 ## Style
 
