@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
 """Weekly Market Analysis Tracker"""
 
+import json
 import os
+import sys
 import warnings
 from datetime import datetime
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -11,8 +14,14 @@ import requests
 import yfinance as yf
 from dotenv import load_dotenv
 from ta.trend import ADXIndicator
+from rich.console import Console
+from rich.table import Table
+from rich.panel import Panel
+from rich.text import Text
+from rich import box
 
 warnings.filterwarnings('ignore')
+console = Console()
 
 # Load environment variables from .env file
 load_dotenv()
@@ -23,21 +32,26 @@ FRED_API_KEY = os.getenv("FRED_API_KEY")
 if not FRED_API_KEY:
     raise ValueError("FRED_API_KEY environment variable is not set. Please check your .env file.")
 
-ASSETS = {
-    "iShares MSCI ACWI ETF": "ISAC.L",
-    "VanEck Semiconductor ETF": "SMH",
-    "Global X Uranium ETF": "URA",
-    "ROBO Global Robotics and Automation ETF": "ROBO",
-    "ARK Autonomous Technology & Robotics ETF": "ARKQ",
-    "Palantir Technologies Inc." : "PLTR",
-    "Bitcoin USD": "BTC-USD",
-    "Ethereum USD": "ETH-USD",
-    "S&P 500": "^GSPC",
-    "Gold Futures": "GC=F",
-    "Silver Futures": "SI=F",
-}
+# Default assets file
+SCRIPT_DIR = Path(__file__).parent
+DEFAULT_ASSETS_FILE = SCRIPT_DIR / "assets.json"
 
-MA_PERIODS = [20, 50, 200]
+
+def load_assets(file_path=None):
+    """Load assets from JSON file."""
+    if file_path is None:
+        file_path = DEFAULT_ASSETS_FILE
+    else:
+        file_path = Path(file_path)
+
+    if not file_path.exists():
+        console.print(f"[red]Error: Assets file not found: {file_path}[/red]")
+        sys.exit(1)
+
+    with open(file_path, 'r') as f:
+        return json.load(f)
+
+MA_PERIODS = [20, 50, 100, 200]
 ZSCORE_WINDOW = 20
 
 # DATA FETCHING
@@ -80,7 +94,7 @@ def get_fear_greed_crypto():
 
 
 def get_vix_zscore():
-    """Fetch VIX and calculate smoothed inverted Z-score (52-week rolling window, 5-period EMA)."""
+    """Fetch VIX and calculate smoothed inverted Z-score (52-day rolling window, 5-period EMA)."""
     hist = yf.download("^VIX", period="3mo", interval="1d", progress=False)
     if hist.empty or len(hist) < 52:
         return None, None
@@ -156,6 +170,97 @@ def calculate_gli():
 
 # TECHNICAL ANALYSIS
 
+def calculate_tsmom(close, lookbacks=[4, 12, 26]):
+    """
+    Time-series momentum for long-only: score 0-1
+    1.0 = all lookbacks positive, 0.0 = all negative
+    """
+    if len(close) < max(lookbacks):
+        return None, []
+
+    scores = []
+    details = []
+    for lb in lookbacks:
+        ret = (close.iloc[-1] / close.iloc[-lb] - 1) * 100
+        is_positive = ret > 0
+        scores.append(1 if is_positive else 0)
+        details.append(f"{lb}w: {ret:+.1f}%")
+
+    composite = sum(scores) / len(scores)
+    return round(composite, 2), details
+
+
+def calculate_ma_score(close, price):
+    """
+    MA trend alignment score (0-7):
+    - Price vs MA20, MA50, MA100, MA200
+    - MA20 vs MA50, MA50 vs MA100, MA100 vs MA200
+    """
+    if len(close) < 50:
+        return None, None, []
+
+    ma20 = close.rolling(20).mean().iloc[-1]
+    ma50 = close.rolling(50).mean().iloc[-1]
+    ma100 = close.rolling(100).mean().iloc[-1] if len(close) >= 100 else None
+    ma200 = close.rolling(200).mean().iloc[-1] if len(close) >= 200 else None
+
+    checks = [
+        (price > ma20, "Price>MA20"),
+        (price > ma50, "Price>MA50"),
+        (ma20 > ma50, "MA20>MA50"),
+    ]
+
+    if ma100 is not None:
+        checks.extend([
+            (price > ma100, "Price>MA100"),
+            (ma50 > ma100, "MA50>MA100"),
+        ])
+
+    if ma200 is not None:
+        checks.extend([
+            (price > ma200, "Price>MA200"),
+            (ma100 > ma200 if ma100 else ma50 > ma200, "MA100>MA200" if ma100 else "MA50>MA200"),
+        ])
+
+    score = sum(1 for cond, _ in checks if cond)
+    max_score = len(checks)
+    details = [name for cond, name in checks if cond]
+
+    return score, max_score, details
+
+
+def classify_regime(adx, tsmom_score, zscore, ma_score, ma_max):
+    """
+    Classify market regime for strategy selection.
+    Returns: regime name, action bias
+    """
+    if adx is None or tsmom_score is None:
+        return "UNKNOWN", "Insufficient data"
+
+    ma_pct = (ma_score / ma_max) if ma_max > 0 else 0
+
+    # Strong uptrend: high ADX + positive momentum + good MA alignment
+    if adx > 25 and tsmom_score >= 0.67 and ma_pct >= 0.6:
+        return "TRENDING_UP", "Ride trend, buy dips"
+
+    # Strong downtrend: high ADX + negative momentum
+    if adx > 25 and tsmom_score <= 0.33:
+        return "TRENDING_DOWN", "Avoid or exit"
+
+    # Mean-reversion opportunity: weak trend + extreme Z
+    if adx < 25 and zscore is not None and abs(zscore) > 1.5:
+        if zscore < -1.5:
+            return "MEAN_REVERT_BUY", "Z-score oversold"
+        else:
+            return "MEAN_REVERT_SELL", "Z-score overbought"
+
+    # Choppy/unclear
+    if adx < 20:
+        return "CHOPPY", "Reduce exposure, wait"
+
+    return "NEUTRAL", "No strong edge"
+
+
 def calculate_zscore(close, window=ZSCORE_WINDOW):
     """Calculate z-score for price series."""
     if len(close) < window:
@@ -199,26 +304,30 @@ def detect_trend(df):
     """Detect trend using MAs, ADX, and directional indicators."""
     if len(df) < 50:
         return "Insufficient Data", "N/A", None
-    
+
     close, high, low = df['Close'], df['High'], df['Low']
     price = close.iloc[-1]
-    
+
     ma20 = close.rolling(20).mean().iloc[-1]
     ma50 = close.rolling(50).mean().iloc[-1]
+    ma100 = close.rolling(100).mean().iloc[-1] if len(close) >= 100 else None
     ma200 = close.rolling(200).mean().iloc[-1] if len(close) >= 200 else None
-    
+
     adx_ind = ADXIndicator(high, low, close, window=14)
     adx = adx_ind.adx().iloc[-1]
     plus_di, minus_di = adx_ind.adx_pos().iloc[-1], adx_ind.adx_neg().iloc[-1]
-    
+
     score = sum([
         1 if price > ma20 else -1,
         1 if price > ma50 else -1,
         1 if ma20 > ma50 else -1,
         1 if plus_di > minus_di else -1,
     ])
+    if ma100 is not None:
+        score += (1 if price > ma100 else -1) + (1 if ma50 > ma100 else -1)
     if ma200 is not None:
-        score += (1 if price > ma200 else -1) + (1 if ma50 > ma200 else -1)
+        ma_above_200 = ma100 > ma200 if ma100 else ma50 > ma200
+        score += (1 if price > ma200 else -1) + (1 if ma_above_200 else -1)
     
     if adx < 20:
         return "↔️ Sideways/Choppy", "Weak", round(adx, 1)
@@ -238,7 +347,13 @@ def detect_trend(df):
 
 def calculate_technicals(ticker):
     """Calculate technical indicators using weekly timeframe only."""
-    data = yf.download(ticker, period="1y", interval="1d", progress=False)
+    # Try 5y for MA200 weekly, fallback to 2y if insufficient
+    data = yf.download(ticker, period="5y", interval="1d", progress=False)
+
+    if data.empty or len(data) < 50:
+        # Fallback: try shorter period
+        data = yf.download(ticker, period="2y", interval="1d", progress=False)
+
     if data.empty:
         return None
 
@@ -253,15 +368,25 @@ def calculate_technicals(ticker):
         'Open': 'first', 'High': 'max', 'Low': 'min', 'Close': 'last', 'Volume': 'sum'
     }).dropna()
 
-    if len(weekly_df) < 26:
+    weeks_available = len(weekly_df)
+
+    if weeks_available < 26:
         return {
             'price': price,
+            'weeks': weeks_available,
             'zscore': None,
             'zscore_zone': 'N/A',
             'ma_distance': 'N/A',
             'trend': 'Insufficient Data',
             'trend_strength': 'N/A',
-            'adx': None
+            'adx': None,
+            'tsmom_score': None,
+            'tsmom_details': [],
+            'ma_score': None,
+            'ma_max': None,
+            'ma_details': [],
+            'regime': 'UNKNOWN',
+            'regime_bias': 'Insufficient data'
         }
 
     # Calculate indicators on weekly data
@@ -274,26 +399,33 @@ def calculate_technicals(ticker):
     else:
         trend, trend_strength, adx = "Insufficient Data", "N/A", None
 
+    # Trend-following indicators
+    tsmom_score, tsmom_details = calculate_tsmom(close_weekly)
+    ma_score, ma_max, ma_details = calculate_ma_score(close_weekly, price)
+
+    # Regime classification
+    regime, regime_bias = classify_regime(adx, tsmom_score, zscore, ma_score, ma_max)
+
     return {
         'price': price,
+        'weeks': weeks_available,
         'zscore': zscore,
         'zscore_zone': zone,
         'ma_distance': ma_distance,
         'trend': trend,
         'trend_strength': trend_strength,
-        'adx': adx
+        'adx': adx,
+        'tsmom_score': tsmom_score,
+        'tsmom_details': tsmom_details,
+        'ma_score': ma_score,
+        'ma_max': ma_max,
+        'ma_details': ma_details,
+        'regime': regime,
+        'regime_bias': regime_bias
     }
 
 
 # HELPERS
-
-def safe_execute(func, error_msg="❌ Could not retrieve"):
-    """Execute function and return result or error message."""
-    try:
-        return func()
-    except Exception:
-        return error_msg
-
 
 def get_regime_from_vix_z(vix_z):
     """Map VIX Z-score to market regime."""
@@ -315,76 +447,261 @@ def format_sign(value):
 
 # MAIN
 
+def get_regime_style(regime):
+    """Return color style based on regime."""
+    styles = {
+        "TRENDING_UP": "bold green",
+        "TRENDING_DOWN": "bold red",
+        "MEAN_REVERT_BUY": "cyan",
+        "MEAN_REVERT_SELL": "yellow",
+        "CHOPPY": "dim",
+        "NEUTRAL": "white",
+        "UNKNOWN": "dim red",
+    }
+    return styles.get(regime, "white")
+
+
+def get_tsmom_style(score):
+    """Return color style based on TSMOM score."""
+    if score is None:
+        return "dim"
+    if score >= 0.67:
+        return "green"
+    if score <= 0.33:
+        return "red"
+    return "yellow"
+
+
+def get_zscore_style(zscore):
+    """Return color style based on Z-score."""
+    if zscore is None:
+        return "dim"
+    if zscore >= 2.0:
+        return "bold red"
+    if zscore <= -2.0:
+        return "bold green"
+    if zscore >= 1.5:
+        return "red"
+    if zscore <= -1.5:
+        return "green"
+    return "white"
+
+
 def main():
-    print(f"\n{'='*90}\n  📊 WEEKLY MARKET ANALYSIS - {datetime.now().strftime('%A, %Y-%m-%d %H:%M')}\n{'='*90}")
-    
-    # MACRO
-    print("\n  🌍 MACRO INDICATORS\n  " + "─" * 50)
-    
-    print("\n  Global Liquidity Index:")
+    # Parse command line argument for assets file
+    assets_file = sys.argv[1] if len(sys.argv) > 1 else None
+    ASSETS = load_assets(assets_file)
+
+    # Get assets file name for display
+    assets_name = Path(assets_file).stem if assets_file else "assets"
+
+    # Header
+    console.print()
+    console.print(Panel.fit(
+        f"[bold cyan]WEEKLY MARKET ANALYSIS[/bold cyan]\n[dim]{datetime.now().strftime('%A, %Y-%m-%d %H:%M')}[/dim]\n[dim cyan]Portfolio: {assets_name}[/dim cyan]",
+        border_style="cyan"
+    ))
+
+    # MACRO TABLE
+    macro_table = Table(title="MACRO INDICATORS", box=box.ROUNDED, border_style="blue")
+    macro_table.add_column("Indicator", style="cyan", width=20)
+    macro_table.add_column("Value", justify="right", width=15)
+    macro_table.add_column("Signal", justify="center", width=15)
+    macro_table.add_column("Detail", style="dim", width=35)
+
+    # GLI
     try:
         if gli := calculate_gli():
-            print(f"     Net Liquidity:  ${gli['value']}B  {gli['trend']}")
-            print(f"     Fed: ${gli['fed_bs']}B | TGA: ${gli['tga']}B | RRP: ${gli['rrp']}B | Date: {gli['date']}")
-            for lbl, chg, pct in [("WoW", gli['wow_change'], gli['wow_pct']),
-                                   ("4-Week", gli['mom_change'], gli['mom_pct']),
-                                   ("12-Week", gli['qoq_change'], gli['qoq_pct'])]:
-                if pct is not None:
-                    print(f"     {lbl}: {format_sign(chg)}B ({format_sign(pct)}%)")
+            trend_style = "green" if "Expanding" in gli['trend'] else "red" if "Contracting" in gli['trend'] else "yellow"
+            macro_table.add_row(
+                "Global Liquidity",
+                f"${gli['value']:,.0f}B",
+                f"[{trend_style}]{gli['trend']}[/{trend_style}]",
+                f"4w: {format_sign(gli['mom_pct'])}% | 12w: {format_sign(gli['qoq_pct'])}%"
+            )
         else:
-            print("     ❌ Could not retrieve")
+            macro_table.add_row("Global Liquidity", "[red]Error[/red]", "-", "-")
     except Exception:
-        print("     ❌ Could not retrieve")
-    
-    print("\n  Volatility & Regime:")
+        macro_table.add_row("Global Liquidity", "[red]Error[/red]", "-", "-")
+
+    # VIX
     try:
         vix, vix_z = get_vix_zscore()
         if vix:
             vix_levels = [(15, "Low"), (20, "Normal"), (30, "Elevated"), (float('inf'), "High")]
             vix_desc = next(desc for threshold, desc in vix_levels if vix < threshold)
-            print(f"     VIX: {vix} ({vix_desc})")
-            print(f"     -Z(VIX): {vix_z:+.2f} → {get_regime_from_vix_z(vix_z)}")
-        else:
-            print("     ❌ Could not retrieve")
+            vix_style = "green" if vix < 15 else "yellow" if vix < 25 else "red"
+            regime = get_regime_from_vix_z(vix_z)
+            regime_style = "green" if regime == "Fear" else "red" if regime == "Complacency" else "white"
+            macro_table.add_row("VIX", f"[{vix_style}]{vix}[/{vix_style}]", vix_desc, "")
+            macro_table.add_row("-Z(VIX)", f"{vix_z:+.2f}", f"[{regime_style}]{regime}[/{regime_style}]", "")
     except Exception:
-        print("     ❌ Could not retrieve")
-    
-    print("\n  Sentiment:")
-    for fn, lbl in [(get_fear_greed_traditional, 'Stocks'), (get_fear_greed_crypto, 'Crypto')]:
+        macro_table.add_row("VIX", "[red]Error[/red]", "-", "-")
+
+    # Fear & Greed
+    for fn, lbl in [(get_fear_greed_traditional, 'F&G Stocks'), (get_fear_greed_crypto, 'F&G Crypto')]:
         try:
             val, cls = fn()
-            print(f"     Fear & Greed ({lbl}): {val} - {cls}")
+            fg_style = "green" if val < 25 else "red" if val > 75 else "yellow" if val < 45 or val > 55 else "white"
+            macro_table.add_row(lbl, f"[{fg_style}]{val}[/{fg_style}]", cls, "")
         except Exception:
-            print(f"     Fear & Greed ({lbl}): ❌ Could not retrieve")
-    
-    # ASSETS
-    print(f"\n{'='*90}\n  📈 ASSET ANALYSIS\n{'='*90}")
-    
-    for name, ticker in ASSETS.items():
-        print(f"\n{'─'*90}\n  {name} ({ticker})\n{'─'*90}")
+            macro_table.add_row(lbl, "[red]Error[/red]", "-", "-")
 
+    console.print()
+    console.print(macro_table)
+
+    # Fetch all asset data once
+    console.print("\n[dim]Fetching asset data...[/dim]")
+    asset_data = {}
+    for name, ticker in ASSETS.items():
         try:
-            if tech := calculate_technicals(ticker):
-                print(f"\n  💰 ${tech['price']:,.2f}" if tech['price'] > 1 else f"\n  💰 ${tech['price']:.6f}")
-                print(f"\n  📆 WEEKLY: {tech['trend']} ({tech['trend_strength']}, ADX: {tech['adx']})")
-                z_display = f"{tech['zscore']:+.2f}" if tech['zscore'] is not None else "N/A"
-                print(f"     Z-Score: {z_display} ({tech['zscore_zone']})")
-                print(f"     MAs: {tech['ma_distance']}")
-            else:
-                print("  ❌ Could not retrieve")
+            asset_data[name] = calculate_technicals(ticker)
         except Exception:
-            print("  ❌ Could not retrieve")
-    
+            asset_data[name] = None
+
+    # ASSETS TABLE
+    asset_table = Table(title="ASSET ANALYSIS", box=box.ROUNDED, border_style="green")
+    asset_table.add_column("Asset", style="bold", width=12, no_wrap=True)
+    asset_table.add_column("Price", justify="right", width=11)
+    asset_table.add_column("Z", justify="center", width=7)
+    asset_table.add_column("TSMOM", justify="center", width=6)
+    asset_table.add_column("MA", justify="center", width=5)
+    asset_table.add_column("ADX", justify="center", width=4)
+    asset_table.add_column("Regime", justify="left", width=18)
+
+    for name, ticker in ASSETS.items():
+        tech = asset_data.get(name)
+        if tech:
+            # Price
+            price_fmt = f"${tech['price']:,.2f}" if tech['price'] > 1 else f"${tech['price']:.4f}"
+
+            # Z-Score
+            if tech['zscore'] is not None:
+                z_style = get_zscore_style(tech['zscore'])
+                z_display = f"[{z_style}]{tech['zscore']:+.2f}[/{z_style}]"
+            else:
+                z_display = "[dim]N/A[/dim]"
+
+            # TSMOM
+            if tech['tsmom_score'] is not None:
+                t_style = get_tsmom_style(tech['tsmom_score'])
+                tsmom_display = f"[{t_style}]{tech['tsmom_score']:.2f}[/{t_style}]"
+            else:
+                tsmom_display = "[dim]N/A[/dim]"
+
+            # MA Score
+            if tech['ma_score'] is not None:
+                ma_pct = tech['ma_score'] / tech['ma_max']
+                ma_style = "green" if ma_pct >= 0.7 else "red" if ma_pct <= 0.4 else "yellow"
+                ma_display = f"[{ma_style}]{tech['ma_score']}/{tech['ma_max']}[/{ma_style}]"
+            else:
+                ma_display = "[dim]N/A[/dim]"
+
+            # ADX
+            if tech['adx'] is not None:
+                adx_style = "green" if tech['adx'] > 25 else "yellow" if tech['adx'] > 20 else "dim"
+                adx_display = f"[{adx_style}]{tech['adx']:.0f}[/{adx_style}]"
+            else:
+                adx_display = "[dim]N/A[/dim]"
+
+            # Regime
+            regime_style = get_regime_style(tech['regime'])
+            regime_display = f"[{regime_style}]{tech['regime']}[/{regime_style}]"
+
+            asset_table.add_row(
+                ticker,
+                price_fmt,
+                z_display,
+                tsmom_display,
+                ma_display,
+                adx_display,
+                regime_display
+            )
+        else:
+            asset_table.add_row(ticker, "[red]Error[/red]", "-", "-", "-", "-", "-")
+
+    console.print()
+    console.print(asset_table)
+
+    # MOMENTUM DETAILS TABLE
+    momentum_table = Table(title="MOMENTUM DETAILS", box=box.SIMPLE, border_style="dim")
+    momentum_table.add_column("Asset", style="bold", width=16, no_wrap=True)
+    momentum_table.add_column("4w", justify="right", width=9)
+    momentum_table.add_column("12w", justify="right", width=9)
+    momentum_table.add_column("26w", justify="right", width=9)
+    momentum_table.add_column("MA Distance", width=50)
+
+    for name, ticker in ASSETS.items():
+        tech = asset_data.get(name)
+        if tech and tech.get('tsmom_details'):
+            details = tech['tsmom_details']
+            ret_4w = details[0].split(': ')[1] if len(details) > 0 else "-"
+            ret_12w = details[1].split(': ')[1] if len(details) > 1 else "-"
+            ret_26w = details[2].split(': ')[1] if len(details) > 2 else "-"
+
+            r4_style = "green" if ret_4w.startswith('+') else "red"
+            r12_style = "green" if ret_12w.startswith('+') else "red"
+            r26_style = "green" if ret_26w.startswith('+') else "red"
+
+            momentum_table.add_row(
+                ticker,
+                f"[{r4_style}]{ret_4w}[/{r4_style}]",
+                f"[{r12_style}]{ret_12w}[/{r12_style}]",
+                f"[{r26_style}]{ret_26w}[/{r26_style}]",
+                f"[dim]{tech['ma_distance']}[/dim]"
+            )
+
+    console.print()
+    console.print(momentum_table)
+
+    # Get macro regimes for summary
+    gli_status = ""
+    gli_warning = ""
+    try:
+        gli = calculate_gli()
+        if gli:
+            gli_trend = gli['trend']
+            gli_4w = gli['mom_pct']
+            gli_status = f"GLI {gli_trend} ({gli_4w:+.1f}% 4w)"
+            if gli_4w and gli_4w <= -2:
+                gli_warning = "[bold red]⚠ GLI CONTRACTING >2%: Downgrade all BUY→WAIT[/bold red]"
+            elif gli_4w and gli_4w >= 2:
+                gli_warning = "[bold green]✓ GLI EXPANDING: Risk-on favored[/bold green]"
+    except:
+        gli_status = "GLI: Unknown"
+
+    vix_status = ""
+    vix_warning = ""
+    try:
+        _, vix_z = get_vix_zscore()
+        vix_regime = get_regime_from_vix_z(vix_z) if vix_z else "Unknown"
+        vix_status = f"-Z(VIX) = {vix_z:+.2f} → {vix_regime}"
+        if vix_z and vix_z >= 1.5:
+            vix_warning = "[bold red]⚠ COMPLACENCY: Downgrade BUY→WAIT, upgrade SELL→STRONG SELL[/bold red]"
+        elif vix_z and vix_z <= -1.5:
+            vix_warning = "[bold green]✓ FEAR: Allow STRONG BUY on oversold assets[/bold green]"
+    except:
+        vix_status = "-Z(VIX): Unknown"
+
+    # Combine warnings
+    warnings = "\n".join(filter(None, [gli_warning, vix_warning]))
+    if warnings:
+        warnings = "\n" + warnings
+
     # LEGEND
-    print(f"\n{'='*90}\n  📖 QUICK REFERENCE\n{'='*90}")
-    print("  📆 ALL ANALYSIS USES WEEKLY TIMEFRAME")
-    print("  TREND: 📈 Up | 📉 Down | ↔️ Sideways | ADX: <20 Weak, 20-25 Mod, >25 Strong")
-    print("  WEEKLY Z-SCORE: >+2 OB | <-2 OS | >+2.5 Extreme OB | <-2.5 Extreme OS")
-    print("  -Z(VIX): >+1.5 Complacency | <-1.5 Fear | ±0.5-1.5 Risk-On/Off")
-    print("  F&G: 0-25 Ext Fear | 26-45 Fear | 46-55 Neutral | 56-75 Greed | 76-100 Ext Greed")
-    print("  GLI: 📈 Expanding >1% | 📉 Contracting <-1% | ➡️ Flat")
-    print("=" * 90)
-    print()
+    legend = f"""[bold cyan]MACRO REGIME[/bold cyan]
+{gli_status} | {vix_status}{warnings}
+
+[bold cyan]REFERENCE[/bold cyan]
+[green]Z-Score:[/green] >+2 OB | <-2 OS | >+2.5 Extreme OB | <-2.5 Extreme OS
+[green]TSMOM:[/green] 1.0=All↑ | 0.67=Mostly↑ | 0.33=Mostly↓ | 0.0=All↓
+[green]MA Score:[/green] 7/7=Strong↑ | 5-6=↑ | 3-4=Mixed | 0-2=↓
+[green]ADX:[/green] <20=Weak | 20-25=Mod | >25=Strong
+[green]Regime:[/green] [bold green]TRENDING_UP[/bold green] | [bold red]TRENDING_DOWN[/bold red] | [cyan]MEAN_REVERT[/cyan] | [dim]CHOPPY[/dim]"""
+
+    console.print()
+    console.print(Panel(legend, border_style="dim"))
+    console.print()
 
 
 if __name__ == "__main__":

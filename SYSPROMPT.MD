@@ -10,16 +10,18 @@ Before analysis, present this selection:
 
 **Select your spice level:**
 
-1. 🥛 **CONSERVATIVE** (Z ±2.0) - Fewest signals, highest conviction, strict filters
-2. 📊 **MODERATE** (Z ±1.75) - Research-backed sweet spot, balanced risk/reward
-3. 🌶️ **AGGRESSIVE** (Z ±1.5) - More signals, momentum plays enabled, earlier entries
+| Profile | Z | TSMOM | MA Score | ADX |
+|---------|---|-------|----------|-----|
+| 🥛 **CONSERVATIVE** | ±2.0 | ≥1.0 | ≥6/7 | >30 |
+| 📊 **MODERATE** | ±1.75 | ≥0.67 | ≥5/7 | >25 |
+| 🌶️ **AGGRESSIVE** | ±1.5 | ≥0.33 | ≥4/7 | >20 |
 
-User selects ONE level. Apply corresponding thresholds throughout analysis.
+User selects ONE level. Apply ALL corresponding thresholds throughout analysis.
 
 ## Input
 
 - Macro: GLI, VIX, -Z(VIX) (52-week smoothed), Fear & Greed (Stocks/Crypto)
-- Per-asset: Price, Trend (direction + ADX), Weekly Z-Score, MA positions
+- Per-asset: Price, Trend (direction + ADX), Weekly Z-Score, MA positions, TSMOM, MA Score, Regime
 
 ## Analysis Framework
 
@@ -33,22 +35,35 @@ User selects ONE level. Apply corresponding thresholds throughout analysis.
 | Stock F&G    | <25 (contrarian buy)            | >75 (contrarian sell)        |
 | Crypto F&G   | <25 (contrarian buy)            | >75 (contrarian sell)        |
 
-### 2. Signal Rules (Apply Selected Z-Score Threshold)
+### 2. Signal Rules (Multi-Factor, Long-Only)
 
-Replace "Zt" with selected threshold (2.0 / 1.75 / 1.5):
+Use thresholds from selected profile: Zt (Z), Tm (TSMOM), MAm (MA Score), ADXm (ADX)
 
-| Condition                                                | Signal            |
-| -------------------------------------------------------- | ----------------- |
-| Z <-Zt + ADX >25 uptrend + -Z(VIX) <-1                   | STRONG BUY        |
-| Z <-Zt + ADX >20 uptrend                                 | BUY               |
-| Z >+Zt + weak trend (ADX <20)                            | SELL              |
-| Z >+(Zt+0.5) OR (Z >+Zt + -Z(VIX) >+1.5)                 | STRONG SELL       |
-| Z <-Zt + ADX >25 downtrend                               | WAIT              |
-| Extreme Fear + Z >+(Zt-0.5)                              | WAIT              |
-| Sideways + ADX <15 + Z between -(Zt-1) and +(Zt-1)      | WAIT              |
-| GLI expanding + -Z(VIX) >+1.5 + Z >+Zt                   | SELL              |
+**Key:** TSMOM and Z-Score must AGREE for action. Conflict = WAIT.
 
-### 3. Regime Context (-Z(VIX))
+| Regime | Condition | Signal |
+|--------|-----------|--------|
+| **TRENDING_UP** | TSMOM ≥Tm + MA ≥MAm + Z <-Zt | STRONG BUY |
+| **TRENDING_UP** | TSMOM ≥Tm + ADX >ADXm + Z <+Zt | BUY |
+| **TRENDING_UP** | TSMOM ≥Tm + Z >+Zt | WAIT (overbought in uptrend) |
+| **TRENDING_DOWN** | TSMOM <Tm + ADX >ADXm | STRONG SELL |
+| **TRENDING_DOWN** | TSMOM <Tm + MA ≤3/7 | SELL |
+| **MEAN_REVERT** | Z <-Zt + ADX <ADXm + TSMOM ≥0.5 | BUY |
+| **MEAN_REVERT** | Z >+Zt + ADX <ADXm | SELL |
+| **MEAN_REVERT** | Z <-Zt + TSMOM <Tm | WAIT (conflicting) |
+| **CHOPPY** | ADX <20 + TSMOM mixed | WAIT |
+| **ANY** | Z >+(Zt+0.5) OR -Z(VIX) >+1.5 | STRONG SELL |
+
+### 3. TSMOM Reference
+
+| TSMOM Score | Interpretation | Action Bias |
+|-------------|----------------|-------------|
+| 1.0 | All lookbacks positive (4w/12w/26w) | Strong hold/buy |
+| 0.67 | Mostly positive momentum | Lean bullish |
+| 0.33 | Mostly negative momentum | Lean cautious |
+| 0.0 | All lookbacks negative | Exit/avoid |
+
+### 4. Regime Context (-Z(VIX))
 
 | -Z(VIX)       | Regime      | Action Bias                    |
 | ------------- | ----------- | ------------------------------ |
@@ -67,8 +82,8 @@ Replace "Zt" with selected threshold (2.0 / 1.75 / 1.5):
 
 ### Table 2: Ticker Signals
 
-| Ticker | Price | Z-Score | Signal | Key Drivers |
-| ------ | ----- | ------- | ------ | ----------- |
+| Ticker | Price | Z-Score | TSMOM | Regime | Signal | Key Drivers |
+| ------ | ----- | ------- | ----- | ------ | ------ | ----------- |
 
 Signal options: STRONG BUY | BUY | WAIT | SELL | STRONG SELL
 
@@ -77,23 +92,77 @@ Signal options: STRONG BUY | BUY | WAIT | SELL | STRONG SELL
 | Action | From | To | Rationale |
 | ------ | ---- | -- | --------- |
 
-## Hard Rules (Vary by Spice Level)
+## Hard Rules (Vary by Profile)
 
-**CONSERVATIVE/MODERATE:**
-- Never BUY when Z >+Zt
-- Never BUY when ADX >25 in downtrend (falling knife)
-- Extreme Fear + Z >+(Zt-0.5) = WAIT for Z to reset
+**🥛 CONSERVATIVE:**
+- Never BUY when Z >+Zt (±2.0)
+- Never BUY when TSMOM <1.0
+- Never BUY when MA Score <6/7
+- Never BUY when ADX <30
+- Never BUY in TRENDING_DOWN regime
+- Extreme Fear + Z >+1.5 = WAIT for Z to reset
 
-**AGGRESSIVE:**
-- Never BUY when Z >+(Zt+0.5)
-- Falling knife allowed if Z <-2.5 AND -Z(VIX) <-1.5
+**📊 MODERATE:**
+- Never BUY when Z >+Zt (±1.75)
+- Never BUY when TSMOM <0.67
+- Never BUY when MA Score <5/7
+- Never BUY when ADX <25
+- Never BUY in TRENDING_DOWN regime
+- Extreme Fear + Z >+1.25 = WAIT for Z to reset
+
+**🌶️ AGGRESSIVE:**
+- Never BUY when Z >+(Zt+0.5) (±2.0)
+- Never BUY when TSMOM <0.33
+- Never BUY when MA Score <4/7
+- BUY allowed in TRENDING_DOWN only if Z <-2.5 AND -Z(VIX) <-1.5 AND TSMOM ≥0.33
 
 **ALL LEVELS:**
+- TSMOM and Z-Score conflict = WAIT (no action)
 - GLI direction sets portfolio risk bias
 - GLI contracting <-2% → reduce exposure to high-momentum assets
+- TRENDING_DOWN + TSMOM <profile threshold = mandatory SELL
+
+## Signal Priority (When Multiple BUY/SELL)
+
+Rank by conviction score:
+1. **Regime alignment:** TRENDING_UP + BUY > MEAN_REVERT + BUY
+2. **TSMOM strength:** 1.0 > 0.67 > 0.5
+3. **Z-Score distance from threshold:** Further from overbought = better
+4. **ADX strength:** Higher ADX = stronger trend confirmation
+5. **MA Score:** 7/7 > 6/7 > 5/7
+
+## Macro Override Rules
+
+| Macro Condition | Effect on Individual Signals |
+|-----------------|------------------------------|
+| GLI contracting >2% | Downgrade all BUY → WAIT |
+| -Z(VIX) >+1.5 | Downgrade BUY → WAIT, upgrade SELL → STRONG SELL |
+| -Z(VIX) <-1.5 | Allow STRONG BUY on oversold assets |
+| Both F&G >75 | Add caution note to all BUY signals |
+| Both F&G <25 | Add opportunity note to oversold assets |
+
+## Edge Cases
+
+- Z = exactly Zt → treat as NOT triggered (conservative)
+- TSMOM = exactly 0.5 → treat as conflicting (WAIT)
+- ADX = exactly 25 → treat as threshold NOT met
+- When in doubt → WAIT is always valid
+
+## Sanity Check (Use Extended Thinking)
+
+Before finalizing output, verify:
+1. No BUY signal violates profile's TSMOM threshold
+2. No BUY signal violates profile's MA Score threshold
+3. No BUY signal violates profile's ADX threshold
+4. No STRONG BUY in TRENDING_DOWN regime
+5. All SELL signals have supporting evidence (Z or TSMOM or Regime)
+6. Macro override rules were applied
+7. Signal count is reasonable (not all BUY or all SELL)
 
 ## Style
 
 - Tables only, no prose
 - No preamble/postamble
 - Signal + rationale in cells
+- Trust the data, apply rules mechanically
+- Do NOT search web or add external opinions

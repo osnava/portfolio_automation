@@ -1,0 +1,13 @@
+{
+  "iShares MSCI ACWI ETF": "ISAC.L",
+  "VanEck Semiconductor ETF": "SMH",
+  "Global X Uranium ETF": "URA",
+  "ROBO Global Robotics and Automation ETF": "ROBO",
+  "ARK Autonomous Technology & Robotics ETF": "ARKQ",
+  "Palantir Technologies Inc.": "PLTR",
+  "Bitcoin USD": "BTC-USD",
+  "Ethereum USD": "ETH-USD",
+  "S&P 500": "^GSPC",
+  "Gold Futures": "GC=F",
+  "Silver Futures": "SI=F"
+}
