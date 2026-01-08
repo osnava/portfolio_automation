@@ -99,6 +99,7 @@ Raw Z-Score = (VIX - μ₅₂) / σ₅₂
 **Common periods:**
 - **MA20:** Short-term trend (approximately 1 month of trading days)
 - **MA50:** Medium-term trend (approximately 2.5 months)
+- **MA100:** Intermediate trend (approximately 5 months)
 - **MA200:** Long-term trend (approximately 10 months), major S/R level
 
 **MA Distance Metric:**
@@ -110,6 +111,28 @@ Distance% = ((Price - MA) / MA) × 100
 - **Positive distance:** Price above MA (bullish)
 - **Negative distance:** Price below MA (bearish)
 - **Large magnitude:** Potential mean reversion opportunity
+
+---
+
+### MA Score (7-Point Alignment)
+**Definition:** Composite trend strength metric based on moving average alignment.
+
+**Calculation:** Score 0-7 based on:
+1. Price > MA20
+2. Price > MA50
+3. Price > MA100
+4. Price > MA200
+5. MA20 > MA50
+6. MA50 > MA100
+7. MA100 > MA200
+
+**Interpretation:**
+- **7/7:** Perfect bullish alignment, strong uptrend
+- **5-6/7:** Bullish structure, uptrend
+- **3-4/7:** Mixed signals, choppy/transitional
+- **0-2/7:** Bearish structure, downtrend
+
+**Usage in framework:** Confirms trend strength for signal generation
 
 ---
 
@@ -281,68 +304,81 @@ X = Current value
 
 ---
 
+### TSMOM (Time-Series Momentum)
+**Definition:** Composite momentum score measuring trend persistence across multiple lookback periods.
+
+**Calculation:**
+1. Calculate returns for 4-week, 12-week, and 26-week lookbacks
+2. Score 1 if positive, 0 if negative for each period
+3. Average the three scores
+
+**Formula:**
+```
+TSMOM = (Sign(R_4w) + Sign(R_12w) + Sign(R_26w)) / 3
+where Sign(R) = 1 if R > 0, else 0
+```
+
+**Interpretation:**
+| TSMOM Score | Meaning | Trading Bias |
+|-------------|---------|--------------|
+| 1.00 | All lookbacks positive | Strong bullish momentum |
+| 0.67 | 2 of 3 positive | Moderate bullish bias |
+| 0.33 | 2 of 3 negative | Moderate bearish bias |
+| 0.00 | All lookbacks negative | Strong bearish momentum |
+
+**Usage in framework:** Primary momentum filter; must agree with Z-score for action signals
+
+---
+
 ## 7. Trading Signals & Actions
 
 ### Signal Taxonomy (by conviction level)
 
 **STRONG BUY**
-- Z <-Zt + ADX >25 uptrend + -Z(VIX) <-1
+- TRENDING_UP regime + TSMOM ≥Tm + MA Score ≥MAm + Z <-Zt
 - Highest conviction long entry
-- Mean reversion + trend + fear regime alignment
+- Oversold asset in confirmed uptrend with multi-factor alignment
 
 **BUY**
-- Z <-Zt + ADX >20 uptrend
-- Standard long entry on oversold + trend confirmation
-
-**BREAKOUT BUY** (Aggressive/YOLO)
-- Z >0 + ADX >30 uptrend
-- Momentum play, not mean reversion
-
-**ADD TO WINNER** (YOLO)
-- Position up >15% + Z <+(Zt-0.5) + ADX >25
-- Pyramiding into strong trends
-
-**ACCUMULATE**
-- Gradual position building on weakness
-- Lower conviction than BUY, often used near support
-
-**HOLD**
-- No action required
-- Sideways + ADX <15 + Z neutral
+- TRENDING_UP regime + TSMOM ≥Tm + ADX >ADXm + Z <+Zt
+- Standard long entry on trend confirmation
+- OR MEAN_REVERT regime + Z <-Zt + ADX <ADXm + TSMOM ≥0.5
 
 **WAIT**
-- Conditions unfavorable for entry
-- Z <-Zt + ADX >25 downtrend (falling knife)
-- Extreme Fear + Z >+(Zt-0.5) (bear trap)
+- Conflicting signals (TSMOM and Z-score disagree)
+- TRENDING_UP + TSMOM ≥Tm but Z >+Zt (overbought in uptrend)
+- MEAN_REVERT + Z <-Zt but TSMOM <Tm (momentum conflict)
+- CHOPPY regime + ADX <20
 
 **SELL**
-- Z >+Zt + weak trend (ADX <20)
-- Exit long on statistical OB without trend support
+- TRENDING_DOWN + TSMOM <Tm + MA Score ≤3/7
+- Exit long on downtrend confirmation
+- OR MEAN_REVERT + Z >+Zt + ADX <ADXm
 
 **STRONG SELL**
-- Z >+(Zt+0.5) OR (Z >+Zt + -Z(VIX) >+1.5)
-- High conviction exit
-- Extreme OB or OB during complacency regime
-
-**TRIM + HEDGE**
-- GLI expanding + -Z(VIX) >+1.5 + Z >+Zt
-- Partial profit taking + tail risk protection via puts
+- TRENDING_DOWN + TSMOM <Tm + ADX >ADXm
+- High conviction exit on strong downtrend
+- OR Z >+(Zt+0.5) (extreme overbought)
+- OR -Z(VIX) >+1.5 (complacency regime override)
 
 ---
 
 ### Position Sizing Qualifiers
 
-**Standard Sizing**
-- Conservative/Moderate: 1x base position
-- Aggressive: 1-1.5x
-- YOLO: 1-2x
+**Standard Sizing (Long-Only Spot)**
+- Conservative: 1x base position, strict entry criteria
+- Moderate: 1x base position, balanced approach
+- Aggressive: 1-1.5x base position, earlier entries allowed
 
-**Half Size**
-- Lower conviction setups
-- High volatility environments (-Z(VIX) <-1.5)
+**Reduced Size Scenarios**
+- Lower conviction setups (0.5x)
+- High volatility environments (-Z(VIX) <-1.5) (0.5x-0.75x)
+- GLI contracting >2% (0.5x for high-momentum assets)
 
-**Pyramiding**
-- Adding to winners in strong trends (YOLO: ADD TO WINNER signal)
+**Risk Management**
+- No short positions (long-only framework)
+- No leverage/margin (spot only)
+- Portfolio hedging via put options when -Z(VIX) >+1.5
 
 ---
 
@@ -354,9 +390,8 @@ X = Current value
 **Risk:** Downtrends can extend far beyond statistical oversold levels
 
 **Framework rule:**
-- Conservative/Moderate: Never buy falling knife
-- Aggressive: Allow if Z <-2.5 AND -Z(VIX) <-1.5 (fear regime + extreme OS)
-- YOLO: Allow if -Z(VIX) <-1.5
+- Conservative/Moderate: Never buy falling knife (WAIT signal)
+- Aggressive: Allow only if Z <-2.5 AND -Z(VIX) <-1.5 AND TSMOM ≥0.33 (fear regime + extreme OS + momentum stabilizing)
 
 ---
 
@@ -402,6 +437,24 @@ Drawdown% = ((Trough - Peak) / Peak) × 100
 ---
 
 ## 9. Market Regimes
+
+### Asset-Level Regime Classification
+**Definition:** Categorization of individual asset price action based on trend, momentum, and statistical position.
+
+**Regimes:**
+
+| Regime | Conditions | Trading Approach |
+|--------|-----------|------------------|
+| **TRENDING_UP** | ADX >25, +DI > -DI, TSMOM ≥0.67 | Follow trend, buy dips |
+| **TRENDING_DOWN** | ADX >25, -DI > +DI, TSMOM <0.33 | Avoid longs, wait for reversal |
+| **MEAN_REVERT_BUY** | Z <-2, ADX <25, choppy trend | Oversold bounce play |
+| **MEAN_REVERT_SELL** | Z >+2, ADX <25, choppy trend | Overbought fade setup |
+| **CHOPPY** | ADX <20, mixed TSMOM | Avoid, no directional edge |
+| **NEUTRAL** | None of the above | Monitor, no immediate action |
+
+**Usage in framework:** Determines which signal logic to apply (trend-following vs mean-reversion)
+
+---
 
 ### Risk-On
 **Characteristics:**
@@ -584,12 +637,26 @@ Sharpe = (Portfolio Return - Risk-Free Rate) / σ_portfolio
 **Definition:** User-selected Z-score threshold based on risk profile.
 
 **Levels:**
-- **Conservative:** 2.0 (fewest signals, highest conviction)
-- **Moderate:** 1.75 (balanced)
-- **Aggressive:** 1.5 (more signals, earlier entries)
-- **YOLO:** 1.0 (maximum signals, momentum-focused)
+- **Conservative (🥛):** ±2.0 (fewest signals, highest conviction)
+- **Moderate (📊):** ±1.75 (balanced)
+- **Aggressive (🌶️):** ±1.5 (more signals, earlier entries)
 
 **Application:** Replaces fixed ±2σ rule with dynamic threshold
+
+---
+
+### Multi-Factor Profile Thresholds
+**Definition:** Risk-specific thresholds for all indicators, not just Z-score.
+
+**Complete Profile Matrix:**
+
+| Profile | Z-Score | TSMOM | MA Score | ADX |
+|---------|---------|-------|----------|-----|
+| 🥛 Conservative | ±2.0 | ≥1.0 | ≥6/7 | >30 |
+| 📊 Moderate | ±1.75 | ≥0.67 | ≥5/7 | >25 |
+| 🌶️ Aggressive | ±1.5 | ≥0.33 | ≥4/7 | >20 |
+
+**Interpretation:** All thresholds must be met simultaneously for signal generation (conservative profiles require stricter conditions across all dimensions)
 
 ---
 
@@ -611,10 +678,9 @@ Sharpe = (Portfolio Return - Risk-Free Rate) / σ_portfolio
 
 | Risk Profile | Entry (OS) | Exit (OB) | Extreme |
 |--------------|-----------|----------|---------|
-| Conservative | <-2.0 | >+2.0 | ±2.5 |
-| Moderate | <-1.75 | >+1.75 | ±2.25 |
-| Aggressive | <-1.5 | >+1.5 | ±2.0 |
-| YOLO | <-1.0 | >+1.0 | ±1.5 |
+| 🥛 Conservative | <-2.0 | >+2.0 | ±2.5 |
+| 📊 Moderate | <-1.75 | >+1.75 | ±2.25 |
+| 🌶️ Aggressive | <-1.5 | >+1.5 | ±2.0 |
 
 ---
 
@@ -665,10 +731,10 @@ Sharpe = (Portfolio Return - Risk-Free Rate) / σ_portfolio
 - **RRP:** Reverse Repo (RRPONTSYD)
 - **S&P 500:** Standard & Poor's 500 Index
 - **TGA:** Treasury General Account (WTREGEN)
+- **TSMOM:** Time-Series Momentum
 - **TSE:** Tokyo Stock Exchange
 - **USD:** United States Dollar
 - **VIX:** CBOE Volatility Index
-- **YOLO:** You Only Live Once (maximum risk profile)
 
 ---
 
@@ -691,4 +757,4 @@ Sharpe = (Portfolio Return - Risk-Free Rate) / σ_portfolio
 
 ---
 
-*Last updated: 2026-01-04*
+*Last updated: 2026-01-07*
