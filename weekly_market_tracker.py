@@ -450,8 +450,8 @@ def main():
     # Get assets file name for display
     assets_name = Path(assets_file).stem if assets_file else "assets"
 
-    # Generate timestamp-based filename
-    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    # Generate timestamp-based filename (24-hour format, no seconds)
+    timestamp = datetime.now().strftime('%Y%m%d_%H%M')
     output_dir = SCRIPT_DIR / "output"
     output_dir.mkdir(exist_ok=True)
 
@@ -564,7 +564,7 @@ def main():
     print("\nWriting CSV files...")
 
     # Macro indicators CSV
-    macro_file = output_dir / f"macro_indicators_{timestamp}.csv"
+    macro_file = output_dir / f"{timestamp}_MACRO.csv"
     with open(macro_file, 'w', newline='', encoding='utf-8') as f:
         if macro_data:
             writer = csv.DictWriter(f, fieldnames=macro_data[0].keys())
@@ -573,7 +573,7 @@ def main():
     print(f"  - {macro_file}")
 
     # Asset analysis CSV
-    asset_file = output_dir / f"asset_analysis_{timestamp}.csv"
+    asset_file = output_dir / f"{timestamp}_SIGNALS.csv"
     with open(asset_file, 'w', newline='', encoding='utf-8') as f:
         if asset_rows:
             writer = csv.DictWriter(f, fieldnames=asset_rows[0].keys())
@@ -582,7 +582,7 @@ def main():
     print(f"  - {asset_file}")
 
     # Momentum details CSV
-    momentum_file = output_dir / f"momentum_details_{timestamp}.csv"
+    momentum_file = output_dir / f"{timestamp}_MOMENTUM.csv"
     with open(momentum_file, 'w', newline='', encoding='utf-8') as f:
         if momentum_rows:
             writer = csv.DictWriter(f, fieldnames=momentum_rows[0].keys())
