@@ -14,7 +14,6 @@ import requests
 import yfinance as yf
 from dotenv import load_dotenv
 from ta.trend import ADXIndicator
-import csv
 
 warnings.filterwarnings('ignore')
 
@@ -163,6 +162,31 @@ def calculate_gli():
 
 
 # TECHNICAL ANALYSIS
+
+def calculate_tema(series, period):
+    """
+    Calculate Triple Exponential Moving Average (TEMA).
+    TEMA = 3*EMA - 3*EMA(EMA) + EMA(EMA(EMA))
+    More responsive than EMA, less lag.
+    """
+    ema1 = series.ewm(span=period, adjust=False).mean()
+    ema2 = ema1.ewm(span=period, adjust=False).mean()
+    ema3 = ema2.ewm(span=period, adjust=False).mean()
+    tema = 3 * ema1 - 3 * ema2 + ema3
+    return tema
+
+
+def detect_cross(ma_fast, ma_fast_prev, ma_slow, ma_slow_prev):
+    """
+    Detect MA crossover.
+    Returns: "Bullish Cross", "Bearish Cross", or "None"
+    """
+    if ma_fast > ma_slow and ma_fast_prev <= ma_slow_prev:
+        return "Bullish Cross"
+    elif ma_fast < ma_slow and ma_fast_prev >= ma_slow_prev:
+        return "Bearish Cross"
+    return "None"
+
 
 def calculate_tsmom(close, lookbacks=[4, 12, 26]):
     """
@@ -420,6 +444,94 @@ def calculate_technicals(ticker):
     }
 
 
+def calculate_daily_technicals(ticker):
+    """Calculate daily (1d) technical indicators using TEMA crosses."""
+    # Fetch 1 year of daily data
+    data = yf.download(ticker, period="1y", interval="1d", progress=False)
+
+    if data.empty or len(data) < 200:
+        return None
+
+    if isinstance(data.columns, pd.MultiIndex):
+        data.columns = data.columns.get_level_values(0)
+
+    close = data['Close']
+    high = data['High']
+    low = data['Low']
+    price = close.iloc[-1]
+
+    # Daily Z-score (20-day window)
+    zscore_daily, zone_daily = calculate_zscore(close, window=20)
+
+    # Calculate TEMA for 20, 50, 200 periods
+    tema20 = calculate_tema(close, 20)
+    tema50 = calculate_tema(close, 50)
+    tema200 = calculate_tema(close, 200)
+
+    # Current and previous values for cross detection
+    tema20_curr = tema20.iloc[-1]
+    tema20_prev = tema20.iloc[-2]
+    tema50_curr = tema50.iloc[-1]
+    tema50_prev = tema50.iloc[-2]
+    tema200_curr = tema200.iloc[-1]
+    tema200_prev = tema200.iloc[-2]
+
+    # Detect crosses
+    cross_20_50 = detect_cross(tema20_curr, tema20_prev, tema50_curr, tema50_prev)
+    cross_50_200 = detect_cross(tema50_curr, tema50_prev, tema200_curr, tema200_prev)
+
+    # TEMA alignment (similar to MA score but with TEMA)
+    tema_alignment = 0
+    if tema20_curr > tema50_curr:
+        tema_alignment += 1
+    if tema50_curr > tema200_curr:
+        tema_alignment += 1
+    if price > tema20_curr:
+        tema_alignment += 1
+
+    # Daily ADX
+    adx_ind = ADXIndicator(high, low, close, window=14)
+    adx_daily = adx_ind.adx().iloc[-1]
+    plus_di_daily = adx_ind.adx_pos().iloc[-1]
+    minus_di_daily = adx_ind.adx_neg().iloc[-1]
+
+    # Daily trend classification
+    if tema20_curr > tema50_curr > tema200_curr and price > tema20_curr:
+        trend_daily = "Strong Bullish"
+    elif tema20_curr > tema50_curr and price > tema20_curr:
+        trend_daily = "Bullish"
+    elif tema20_curr < tema50_curr < tema200_curr and price < tema20_curr:
+        trend_daily = "Strong Bearish"
+    elif tema20_curr < tema50_curr and price < tema20_curr:
+        trend_daily = "Bearish"
+    else:
+        trend_daily = "Mixed"
+
+    # Distance from TEMAs (%)
+    tema20_dist = ((price - tema20_curr) / tema20_curr) * 100
+    tema50_dist = ((price - tema50_curr) / tema50_curr) * 100
+    tema200_dist = ((price - tema200_curr) / tema200_curr) * 100
+
+    return {
+        'price': price,
+        'zscore_daily': zscore_daily,
+        'zscore_zone_daily': zone_daily,
+        'tema20': round(tema20_curr, 2),
+        'tema50': round(tema50_curr, 2),
+        'tema200': round(tema200_curr, 2),
+        'tema20_dist': round(tema20_dist, 2),
+        'tema50_dist': round(tema50_dist, 2),
+        'tema200_dist': round(tema200_dist, 2),
+        'cross_20_50': cross_20_50,
+        'cross_50_200': cross_50_200,
+        'tema_alignment': f"{tema_alignment}/3",
+        'adx_daily': round(adx_daily, 1),
+        'plus_di_daily': round(plus_di_daily, 1),
+        'minus_di_daily': round(minus_di_daily, 1),
+        'trend_daily': trend_daily,
+    }
+
+
 # HELPERS
 
 def get_regime_from_vix_z(vix_z):
@@ -499,19 +611,23 @@ def main():
         except Exception:
             macro_data.append({'Indicator': lbl, 'Value': 'Error', 'Signal': '-', 'Detail': '-'})
 
-    # Fetch all asset data
+    # Fetch all asset data (weekly and daily)
     print(f"Fetching data for {len(ASSETS)} assets...")
     asset_data = {}
+    daily_data = {}
     for name, ticker in ASSETS.items():
         try:
-            print(f"  - {ticker}...")
+            print(f"  - {ticker} (weekly + daily)...")
             asset_data[name] = calculate_technicals(ticker)
+            daily_data[name] = calculate_daily_technicals(ticker)
         except Exception:
             asset_data[name] = None
+            daily_data[name] = None
 
     # Prepare asset analysis data
     asset_rows = []
     momentum_rows = []
+    daily_rows = []
 
     for name, ticker in ASSETS.items():
         tech = asset_data.get(name)
@@ -560,37 +676,76 @@ def main():
                 'Regime_Bias': '-'
             })
 
-    # Write CSV files
-    print("\nWriting CSV files...")
+        # Daily technicals row
+        daily_tech = daily_data.get(name)
+        if daily_tech:
+            price_fmt = f"${daily_tech['price']:,.2f}" if daily_tech['price'] > 1 else f"${daily_tech['price']:.4f}"
+            zscore_daily = f"{daily_tech['zscore_daily']:+.2f}" if daily_tech['zscore_daily'] is not None else "N/A"
 
-    # Macro indicators CSV
-    macro_file = output_dir / f"{timestamp}_MACRO.csv"
-    with open(macro_file, 'w', newline='', encoding='utf-8') as f:
+            daily_rows.append({
+                'Asset': ticker,
+                'Price': price_fmt,
+                'Z-Score_Daily': zscore_daily,
+                'Z-Score_Zone': daily_tech['zscore_zone_daily'],
+                'TEMA20': f"${daily_tech['tema20']:,.2f}",
+                'TEMA50': f"${daily_tech['tema50']:,.2f}",
+                'TEMA200': f"${daily_tech['tema200']:,.2f}",
+                'TEMA20_Dist': f"{daily_tech['tema20_dist']:+.2f}%",
+                'TEMA50_Dist': f"{daily_tech['tema50_dist']:+.2f}%",
+                'TEMA200_Dist': f"{daily_tech['tema200_dist']:+.2f}%",
+                'Cross_20_50': daily_tech['cross_20_50'],
+                'Cross_50_200': daily_tech['cross_50_200'],
+                'TEMA_Alignment': daily_tech['tema_alignment'],
+                'ADX_Daily': f"{daily_tech['adx_daily']:.1f}",
+                'Trend_Daily': daily_tech['trend_daily'],
+            })
+        else:
+            daily_rows.append({
+                'Asset': ticker,
+                'Price': 'Error',
+                'Z-Score_Daily': '-',
+                'Z-Score_Zone': '-',
+                'TEMA20': '-',
+                'TEMA50': '-',
+                'TEMA200': '-',
+                'TEMA20_Dist': '-',
+                'TEMA50_Dist': '-',
+                'TEMA200_Dist': '-',
+                'Cross_20_50': '-',
+                'Cross_50_200': '-',
+                'TEMA_Alignment': '-',
+                'ADX_Daily': '-',
+                'Trend_Daily': '-',
+            })
+
+    # Write XLSX file with multiple sheets
+    print("\nWriting XLSX file...")
+
+    xlsx_file = output_dir / f"{timestamp}_ANALYSIS.xlsx"
+
+    with pd.ExcelWriter(xlsx_file, engine='openpyxl') as writer:
+        # Sheet 1: Macro indicators
         if macro_data:
-            writer = csv.DictWriter(f, fieldnames=macro_data[0].keys())
-            writer.writeheader()
-            writer.writerows(macro_data)
-    print(f"  - {macro_file}")
+            df_macro = pd.DataFrame(macro_data)
+            df_macro.to_excel(writer, sheet_name='Macro', index=False)
 
-    # Asset analysis CSV
-    asset_file = output_dir / f"{timestamp}_SIGNALS.csv"
-    with open(asset_file, 'w', newline='', encoding='utf-8') as f:
+        # Sheet 2: Weekly signals
         if asset_rows:
-            writer = csv.DictWriter(f, fieldnames=asset_rows[0].keys())
-            writer.writeheader()
-            writer.writerows(asset_rows)
-    print(f"  - {asset_file}")
+            df_weekly = pd.DataFrame(asset_rows)
+            df_weekly.to_excel(writer, sheet_name='Weekly', index=False)
 
-    # Momentum details CSV
-    momentum_file = output_dir / f"{timestamp}_MOMENTUM.csv"
-    with open(momentum_file, 'w', newline='', encoding='utf-8') as f:
+        # Sheet 3: Momentum details
         if momentum_rows:
-            writer = csv.DictWriter(f, fieldnames=momentum_rows[0].keys())
-            writer.writeheader()
-            writer.writerows(momentum_rows)
-    print(f"  - {momentum_file}")
+            df_momentum = pd.DataFrame(momentum_rows)
+            df_momentum.to_excel(writer, sheet_name='Momentum', index=False)
 
-    print(f"\nAnalysis complete. Files saved to: {output_dir}")
+        # Sheet 4: Daily signals
+        if daily_rows:
+            df_daily = pd.DataFrame(daily_rows)
+            df_daily.to_excel(writer, sheet_name='Daily', index=False)
+
+    print(f"  - {xlsx_file}")
+    print(f"\nAnalysis complete. File saved to: {output_dir}")
 
 
 if __name__ == "__main__":
