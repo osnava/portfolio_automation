@@ -14,6 +14,9 @@ import requests
 import yfinance as yf
 from dotenv import load_dotenv
 from ta.trend import ADXIndicator
+from openpyxl import load_workbook
+from openpyxl.formatting.rule import ColorScaleRule, CellIsRule
+from openpyxl.styles import PatternFill
 
 warnings.filterwarnings('ignore')
 
@@ -552,6 +555,154 @@ def format_sign(value):
     return f"{'+' if value >= 0 else ''}{value}"
 
 
+# CONDITIONAL FORMATTING
+
+def optimize_column_widths(ws):
+    """Auto-adjust column widths based on content."""
+    for column in ws.columns:
+        max_length = 0
+        column_letter = column[0].column_letter
+
+        for cell in column:
+            try:
+                if cell.value:
+                    # Convert to string and measure length
+                    cell_length = len(str(cell.value))
+                    if cell_length > max_length:
+                        max_length = cell_length
+            except:
+                pass
+
+        # Set width with some padding (add 2 for comfort)
+        adjusted_width = min(max_length + 2, 50)  # Cap at 50 to avoid excessive width
+        ws.column_dimensions[column_letter].width = adjusted_width
+
+
+def apply_conditional_formatting(xlsx_path, num_rows):
+    """
+    Apply conditional formatting and optimize column widths for Excel file.
+
+    Color Scheme:
+    - Z-scores: Red (extreme ±2) → White (neutral 0) → Yellow (moderate)
+    - Returns/TSMOM: Red (negative) → White (0) → Green (positive)
+    - ADX/Scores: White (low) → Green (high)
+    - VIX: Green (low) → Red (high) - inverted scale
+
+    Args:
+        xlsx_path: Path to the Excel file
+        num_rows: Number of data rows (excluding header) - used for dynamic range formatting
+    """
+    wb = load_workbook(xlsx_path)
+
+    # === WEEKLY SHEET ===
+    if 'Weekly' in wb.sheetnames:
+        ws = wb['Weekly']
+
+        # Z-Score: -2 (red) → 0 (white) → +2 (yellow/orange)
+        ws.conditional_formatting.add(f'C2:C{num_rows+1}',
+            ColorScaleRule(start_type='num', start_value=-2, start_color='F8696B',  # Red
+                          mid_type='num', mid_value=0, mid_color='FFFFFF',          # White
+                          end_type='num', end_value=2, end_color='FFEB84'))         # Yellow
+
+        # TSMOM_%: -20 (red) → 0 (white) → +20 (green)
+        ws.conditional_formatting.add(f'D2:D{num_rows+1}',
+            ColorScaleRule(start_type='num', start_value=-20, start_color='F8696B',  # Red
+                          mid_type='num', mid_value=0, mid_color='FFFFFF',           # White
+                          end_type='num', end_value=20, end_color='63BE7B'))         # Green
+
+        # MA_Score: 0 (white) → 7 (green)
+        ws.conditional_formatting.add(f'E2:E{num_rows+1}',
+            ColorScaleRule(start_type='num', start_value=0, start_color='FFFFFF',   # White
+                          end_type='num', end_value=7, end_color='63BE7B'))          # Green
+
+        # ADX: 10 (white) → 50 (green)
+        ws.conditional_formatting.add(f'G2:G{num_rows+1}',
+            ColorScaleRule(start_type='num', start_value=10, start_color='FFFFFF',  # White
+                          end_type='num', end_value=50, end_color='63BE7B'))         # Green
+
+        # Optimize column widths
+        optimize_column_widths(ws)
+
+    # === MOMENTUM SHEET ===
+    if 'Momentum' in wb.sheetnames:
+        ws = wb['Momentum']
+
+        # All return columns: -30 (red) → 0 (white) → +30 (green)
+        for col in ['B', 'C', 'D']:  # 4w, 12w, 26w returns
+            ws.conditional_formatting.add(f'{col}2:{col}{num_rows+1}',
+                ColorScaleRule(start_type='num', start_value=-30, start_color='F8696B',  # Red
+                              mid_type='num', mid_value=0, mid_color='FFFFFF',           # White
+                              end_type='num', end_value=30, end_color='63BE7B'))         # Green
+
+        # Optimize column widths
+        optimize_column_widths(ws)
+
+    # === DAILY SHEET ===
+    if 'Daily' in wb.sheetnames:
+        ws = wb['Daily']
+
+        # Z-Score_Daily: -2 (red) → 0 (white) → +2 (yellow)
+        ws.conditional_formatting.add(f'C2:C{num_rows+1}',
+            ColorScaleRule(start_type='num', start_value=-2, start_color='F8696B',
+                          mid_type='num', mid_value=0, mid_color='FFFFFF',
+                          end_type='num', end_value=2, end_color='FFEB84'))
+
+        # TEMA distance %: -10 (red) → 0 (white) → +10 (green)
+        for col in ['H', 'I', 'J']:  # TEMA20/50/200 distances
+            ws.conditional_formatting.add(f'{col}2:{col}{num_rows+1}',
+                ColorScaleRule(start_type='num', start_value=-10, start_color='F8696B',
+                              mid_type='num', mid_value=0, mid_color='FFFFFF',
+                              end_type='num', end_value=10, end_color='63BE7B'))
+
+        # ADX_Daily: 10 (white) → 50 (green)
+        ws.conditional_formatting.add(f'N2:N{num_rows+1}',
+            ColorScaleRule(start_type='num', start_value=10, start_color='FFFFFF',
+                          end_type='num', end_value=50, end_color='63BE7B'))
+
+        # Cross detection: Highlight bullish crosses in light green, bearish in light red
+        green_fill = PatternFill(start_color='C6EFCE', end_color='C6EFCE', fill_type='solid')
+        red_fill = PatternFill(start_color='FFC7CE', end_color='FFC7CE', fill_type='solid')
+
+        ws.conditional_formatting.add(f'K2:K{num_rows+1}',
+            CellIsRule(operator='equal', formula=['"Bullish Cross"'], fill=green_fill))
+        ws.conditional_formatting.add(f'K2:K{num_rows+1}',
+            CellIsRule(operator='equal', formula=['"Bearish Cross"'], fill=red_fill))
+        ws.conditional_formatting.add(f'L2:L{num_rows+1}',
+            CellIsRule(operator='equal', formula=['"Bullish Cross"'], fill=green_fill))
+        ws.conditional_formatting.add(f'L2:L{num_rows+1}',
+            CellIsRule(operator='equal', formula=['"Bearish Cross"'], fill=red_fill))
+
+        # Optimize column widths
+        optimize_column_widths(ws)
+
+    # === MACRO SHEET ===
+    if 'Macro' in wb.sheetnames:
+        ws = wb['Macro']
+
+        # VIX (row 2): 10 (green/calm) → 40 (red/fear) - INVERTED
+        ws.conditional_formatting.add('B2:B2',
+            ColorScaleRule(start_type='num', start_value=10, start_color='63BE7B',  # Green
+                          end_type='num', end_value=40, end_color='F8696B'))        # Red
+
+        # -Z(VIX) (row 3): -2 (red/fear) → 0 (white) → +2 (orange/complacency)
+        ws.conditional_formatting.add('B3:B3',
+            ColorScaleRule(start_type='num', start_value=-2, start_color='F8696B',
+                          mid_type='num', mid_value=0, mid_color='FFFFFF',
+                          end_type='num', end_value=2, end_color='FFEB84'))
+
+        # F&G indices (rows 4-5): 0 (red/fear) → 50 (white) → 100 (red/greed)
+        ws.conditional_formatting.add('B4:B5',
+            ColorScaleRule(start_type='num', start_value=0, start_color='F8696B',
+                          mid_type='num', mid_value=50, mid_color='FFFFFF',
+                          end_type='num', end_value=100, end_color='F8696B'))
+
+        # Optimize column widths
+        optimize_column_widths(ws)
+
+    wb.save(xlsx_path)
+    print(f"  - Applied conditional formatting and optimized column widths")
+
+
 # MAIN
 
 def main():
@@ -580,14 +731,15 @@ def main():
         if gli := calculate_gli():
             macro_data.append({
                 'Indicator': 'Global Liquidity',
-                'Value': f"${gli['value']:,.0f}B",
+                'Value': round(gli['value'], 2),
+                'Unit': 'Billions USD',
                 'Signal': gli['trend'],
                 'Detail': f"4w: {format_sign(gli['mom_pct'])}% | 12w: {format_sign(gli['qoq_pct'])}%"
             })
         else:
-            macro_data.append({'Indicator': 'Global Liquidity', 'Value': 'Error', 'Signal': '-', 'Detail': '-'})
+            macro_data.append({'Indicator': 'Global Liquidity', 'Value': None, 'Unit': None, 'Signal': 'Error', 'Detail': 'Error'})
     except Exception:
-        macro_data.append({'Indicator': 'Global Liquidity', 'Value': 'Error', 'Signal': '-', 'Detail': '-'})
+        macro_data.append({'Indicator': 'Global Liquidity', 'Value': None, 'Unit': None, 'Signal': 'Error', 'Detail': 'Error'})
 
     # VIX
     print("Fetching VIX data...")
@@ -597,19 +749,19 @@ def main():
             vix_levels = [(15, "Low"), (20, "Normal"), (30, "Elevated"), (float('inf'), "High")]
             vix_desc = next(desc for threshold, desc in vix_levels if vix < threshold)
             regime = get_regime_from_vix_z(vix_z)
-            macro_data.append({'Indicator': 'VIX', 'Value': vix, 'Signal': vix_desc, 'Detail': ''})
-            macro_data.append({'Indicator': '-Z(VIX)', 'Value': f"{vix_z:+.2f}", 'Signal': regime, 'Detail': ''})
+            macro_data.append({'Indicator': 'VIX', 'Value': round(vix, 2), 'Unit': 'Index', 'Signal': vix_desc, 'Detail': ''})
+            macro_data.append({'Indicator': '-Z(VIX)', 'Value': round(vix_z, 2), 'Unit': 'Z-Score', 'Signal': regime, 'Detail': ''})
     except Exception:
-        macro_data.append({'Indicator': 'VIX', 'Value': 'Error', 'Signal': '-', 'Detail': '-'})
+        macro_data.append({'Indicator': 'VIX', 'Value': None, 'Unit': None, 'Signal': 'Error', 'Detail': 'Error'})
 
     # Fear & Greed
     print("Fetching Fear & Greed indices...")
     for fn, lbl in [(get_fear_greed_traditional, 'F&G Stocks'), (get_fear_greed_crypto, 'F&G Crypto')]:
         try:
             val, cls = fn()
-            macro_data.append({'Indicator': lbl, 'Value': val, 'Signal': cls, 'Detail': ''})
+            macro_data.append({'Indicator': lbl, 'Value': int(val), 'Unit': '0-100 Scale', 'Signal': cls, 'Detail': ''})
         except Exception:
-            macro_data.append({'Indicator': lbl, 'Value': 'Error', 'Signal': '-', 'Detail': '-'})
+            macro_data.append({'Indicator': lbl, 'Value': None, 'Unit': None, 'Signal': 'Error', 'Detail': 'Error'})
 
     # Fetch all asset data (weekly and daily)
     print(f"Fetching data for {len(ASSETS)} assets...")
@@ -632,90 +784,84 @@ def main():
     for name, ticker in ASSETS.items():
         tech = asset_data.get(name)
         if tech:
-            # Asset analysis row
-            price_fmt = f"${tech['price']:,.2f}" if tech['price'] > 1 else f"${tech['price']:.4f}"
-            zscore_val = f"{tech['zscore']:+.2f}" if tech['zscore'] is not None else "N/A"
-            tsmom_val = f"{tech['tsmom_score']:+.2f}%" if tech['tsmom_score'] is not None else "N/A"
-            ma_val = f"{tech['ma_score']}/{tech['ma_max']}" if tech['ma_score'] is not None else "N/A"
-            adx_val = f"{tech['adx']:.0f}" if tech['adx'] is not None else "N/A"
-
+            # Asset analysis row - use numeric types for Excel
             asset_rows.append({
                 'Asset': ticker,
-                'Price': price_fmt,
-                'Z-Score': zscore_val,
-                'TSMOM': tsmom_val,
-                'MA_Score': ma_val,
-                'ADX': adx_val,
+                'Price': round(tech['price'], 4),
+                'Z-Score': round(tech['zscore'], 2) if tech['zscore'] is not None else None,
+                'TSMOM_%': round(tech['tsmom_score'], 2) if tech['tsmom_score'] is not None else None,
+                'MA_Score': tech['ma_score'] if tech['ma_score'] is not None else None,
+                'MA_Max': tech['ma_max'] if tech['ma_max'] is not None else None,
+                'ADX': round(tech['adx'], 1) if tech['adx'] is not None else None,
                 'Regime': tech['regime'],
                 'Regime_Bias': tech['regime_bias']
             })
 
-            # Momentum details row
+            # Momentum details row - extract numeric values
             if tech.get('tsmom_details'):
                 details = tech['tsmom_details']
-                ret_4w = details[0].split(': ')[1] if len(details) > 0 else "-"
-                ret_12w = details[1].split(': ')[1] if len(details) > 1 else "-"
-                ret_26w = details[2].split(': ')[1] if len(details) > 2 else "-"
+                # Parse "4w: +2.5%" -> 2.5
+                ret_4w = float(details[0].split(': ')[1].rstrip('%')) if len(details) > 0 else None
+                ret_12w = float(details[1].split(': ')[1].rstrip('%')) if len(details) > 1 else None
+                ret_26w = float(details[2].split(': ')[1].rstrip('%')) if len(details) > 2 else None
 
                 momentum_rows.append({
                     'Asset': ticker,
-                    '4w_Return': ret_4w,
-                    '12w_Return': ret_12w,
-                    '26w_Return': ret_26w,
-                    'MA_Distance': tech['ma_distance']
+                    '4w_Return_%': ret_4w,
+                    '12w_Return_%': ret_12w,
+                    '26w_Return_%': ret_26w,
+                    'MA_Distance': tech['ma_distance']  # Keep as text (complex format)
                 })
         else:
             asset_rows.append({
                 'Asset': ticker,
-                'Price': 'Error',
-                'Z-Score': '-',
-                'TSMOM': '-',
-                'MA_Score': '-',
-                'ADX': '-',
-                'Regime': '-',
-                'Regime_Bias': '-'
+                'Price': None,
+                'Z-Score': None,
+                'TSMOM_%': None,
+                'MA_Score': None,
+                'MA_Max': None,
+                'ADX': None,
+                'Regime': 'Error',
+                'Regime_Bias': 'Error'
             })
 
-        # Daily technicals row
+        # Daily technicals row - use numeric types for Excel
         daily_tech = daily_data.get(name)
         if daily_tech:
-            price_fmt = f"${daily_tech['price']:,.2f}" if daily_tech['price'] > 1 else f"${daily_tech['price']:.4f}"
-            zscore_daily = f"{daily_tech['zscore_daily']:+.2f}" if daily_tech['zscore_daily'] is not None else "N/A"
-
             daily_rows.append({
                 'Asset': ticker,
-                'Price': price_fmt,
-                'Z-Score_Daily': zscore_daily,
+                'Price': round(daily_tech['price'], 4),
+                'Z-Score_Daily': round(daily_tech['zscore_daily'], 2) if daily_tech['zscore_daily'] is not None else None,
                 'Z-Score_Zone': daily_tech['zscore_zone_daily'],
-                'TEMA20': f"${daily_tech['tema20']:,.2f}",
-                'TEMA50': f"${daily_tech['tema50']:,.2f}",
-                'TEMA200': f"${daily_tech['tema200']:,.2f}",
-                'TEMA20_Dist': f"{daily_tech['tema20_dist']:+.2f}%",
-                'TEMA50_Dist': f"{daily_tech['tema50_dist']:+.2f}%",
-                'TEMA200_Dist': f"{daily_tech['tema200_dist']:+.2f}%",
+                'TEMA20': round(daily_tech['tema20'], 2),
+                'TEMA50': round(daily_tech['tema50'], 2),
+                'TEMA200': round(daily_tech['tema200'], 2),
+                'TEMA20_Dist_%': round(daily_tech['tema20_dist'], 2),
+                'TEMA50_Dist_%': round(daily_tech['tema50_dist'], 2),
+                'TEMA200_Dist_%': round(daily_tech['tema200_dist'], 2),
                 'Cross_20_50': daily_tech['cross_20_50'],
                 'Cross_50_200': daily_tech['cross_50_200'],
-                'TEMA_Alignment': daily_tech['tema_alignment'],
-                'ADX_Daily': f"{daily_tech['adx_daily']:.1f}",
+                'TEMA_Alignment': daily_tech['tema_alignment'],  # Keep as "X/3" string
+                'ADX_Daily': round(daily_tech['adx_daily'], 1),
                 'Trend_Daily': daily_tech['trend_daily'],
             })
         else:
             daily_rows.append({
                 'Asset': ticker,
-                'Price': 'Error',
-                'Z-Score_Daily': '-',
-                'Z-Score_Zone': '-',
-                'TEMA20': '-',
-                'TEMA50': '-',
-                'TEMA200': '-',
-                'TEMA20_Dist': '-',
-                'TEMA50_Dist': '-',
-                'TEMA200_Dist': '-',
-                'Cross_20_50': '-',
-                'Cross_50_200': '-',
-                'TEMA_Alignment': '-',
-                'ADX_Daily': '-',
-                'Trend_Daily': '-',
+                'Price': None,
+                'Z-Score_Daily': None,
+                'Z-Score_Zone': None,
+                'TEMA20': None,
+                'TEMA50': None,
+                'TEMA200': None,
+                'TEMA20_Dist_%': None,
+                'TEMA50_Dist_%': None,
+                'TEMA200_Dist_%': None,
+                'Cross_20_50': 'Error',
+                'Cross_50_200': 'Error',
+                'TEMA_Alignment': None,
+                'ADX_Daily': None,
+                'Trend_Daily': 'Error',
             })
 
     # Write XLSX file with multiple sheets
@@ -745,6 +891,12 @@ def main():
             df_daily.to_excel(writer, sheet_name='Daily', index=False)
 
     print(f"  - {xlsx_file}")
+
+    # Apply conditional formatting
+    print("\nApplying conditional formatting...")
+    apply_conditional_formatting(xlsx_file, len(asset_rows))
+    print("  - Formatting applied")
+
     print(f"\nAnalysis complete. File saved to: {output_dir}")
 
 
