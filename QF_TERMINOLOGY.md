@@ -149,6 +149,47 @@ where α = 2 / (N + 1)
 
 ---
 
+### TEMA (Triple Exponential Moving Average)
+**Definition:** Triple-smoothed moving average that reduces lag while maintaining smoothness, used for faster trend detection and cross signals.
+
+**Formula:**
+```
+EMA1 = EMA(Price, N)
+EMA2 = EMA(EMA1, N)
+EMA3 = EMA(EMA2, N)
+
+TEMA = 3 × EMA1 - 3 × EMA2 + EMA3
+```
+
+**Common periods:**
+- **TEMA20:** Short-term trend (daily timeframe)
+- **TEMA50:** Medium-term trend
+- **TEMA200:** Long-term trend
+
+**TEMA Distance Metric:**
+```
+TEMA_Dist_% = ((Price - TEMA) / TEMA) × 100
+```
+
+**Cross Detection:**
+- **Bullish Cross:** TEMA_fast crosses above TEMA_slow (e.g., TEMA20 > TEMA50 when previously TEMA20 ≤ TEMA50)
+- **Bearish Cross:** TEMA_fast crosses below TEMA_slow
+
+**TEMA Alignment:** Score 0-3 based on:
+1. Price > TEMA20
+2. TEMA20 > TEMA50
+3. TEMA50 > TEMA200
+
+**Interpretation:**
+- **3/3:** Perfect bullish alignment, strong uptrend
+- **2/3:** Moderate bullish structure
+- **1/3:** Mixed signals
+- **0/3:** Bearish structure
+
+**Usage in framework:** Daily timeframe cross detection for entry/exit timing confirmation
+
+---
+
 ## 4. Statistical Measures
 
 ### Z-Score (Standard Score)
@@ -305,26 +346,33 @@ X = Current value
 ---
 
 ### TSMOM (Time-Series Momentum)
-**Definition:** Composite momentum score measuring trend persistence across multiple lookback periods.
+**Definition:** Composite momentum metric measuring average percentage return across multiple lookback periods.
 
 **Calculation:**
-1. Calculate returns for 4-week, 12-week, and 26-week lookbacks
-2. Score 1 if positive, 0 if negative for each period
-3. Average the three scores
+1. Calculate percentage returns for 4-week, 12-week, and 26-week lookbacks
+2. Average the three percentage returns
+3. Express as percentage (e.g., +15.3%, -5.2%)
 
 **Formula:**
 ```
-TSMOM = (Sign(R_4w) + Sign(R_12w) + Sign(R_26w)) / 3
-where Sign(R) = 1 if R > 0, else 0
+R_4w = ((Price_current / Price_4w_ago) - 1) × 100
+R_12w = ((Price_current / Price_12w_ago) - 1) × 100
+R_26w = ((Price_current / Price_26w_ago) - 1) × 100
+
+TSMOM_% = (R_4w + R_12w + R_26w) / 3
 ```
 
 **Interpretation:**
-| TSMOM Score | Meaning | Trading Bias |
-|-------------|---------|--------------|
-| 1.00 | All lookbacks positive | Strong bullish momentum |
-| 0.67 | 2 of 3 positive | Moderate bullish bias |
-| 0.33 | 2 of 3 negative | Moderate bearish bias |
-| 0.00 | All lookbacks negative | Strong bearish momentum |
+| TSMOM_% Range | Meaning | Trading Bias |
+|---------------|---------|--------------|
+| >+15% | Strong positive momentum across all timeframes | Strong hold/buy |
+| +5% to +15% | Moderate positive momentum | Lean bullish |
+| +2% to +5% | Weak positive momentum | Cautiously bullish |
+| -2% to +2% | Neutral/choppy momentum | Wait/hold |
+| -5% to -2% | Weak negative momentum | Cautiously bearish |
+| <-5% | Strong negative momentum | Exit/avoid |
+
+**Example:** If 4w return = +8%, 12w return = +12%, 26w return = +10%, then TSMOM = +10%
 
 **Usage in framework:** Primary momentum filter; must agree with Z-score for action signals
 
@@ -334,29 +382,32 @@ where Sign(R) = 1 if R > 0, else 0
 
 ### Signal Taxonomy (by conviction level)
 
+**Note:** Tm = TSMOM_% threshold (Conservative: +10%, Moderate: +5%, Aggressive: +2%)
+
 **STRONG BUY**
-- TRENDING_UP regime + TSMOM ≥Tm + MA Score ≥MAm + Z <-Zt
+- TRENDING_UP regime + TSMOM_% ≥Tm + MA Score ≥MAm + Z <-Zt
 - Highest conviction long entry
 - Oversold asset in confirmed uptrend with multi-factor alignment
 
 **BUY**
-- TRENDING_UP regime + TSMOM ≥Tm + ADX >ADXm + Z <+Zt
+- TRENDING_UP regime + TSMOM_% ≥Tm + ADX >ADXm + Z <+Zt
 - Standard long entry on trend confirmation
-- OR MEAN_REVERT regime + Z <-Zt + ADX <ADXm + TSMOM ≥0.5
+- OR MEAN_REVERT regime + Z <-Zt + ADX <ADXm + TSMOM_% >0%
 
 **WAIT**
 - Conflicting signals (TSMOM and Z-score disagree)
-- TRENDING_UP + TSMOM ≥Tm but Z >+Zt (overbought in uptrend)
-- MEAN_REVERT + Z <-Zt but TSMOM <Tm (momentum conflict)
+- TRENDING_UP + TSMOM_% ≥Tm but Z >+Zt (overbought in uptrend)
+- MEAN_REVERT + Z <-Zt but TSMOM_% <Tm (momentum conflict)
 - CHOPPY regime + ADX <20
+- TSMOM_% in range -2% to +2% (neutral/choppy momentum)
 
 **SELL**
-- TRENDING_DOWN + TSMOM <Tm + MA Score ≤3/7
+- TRENDING_DOWN + TSMOM_% <-2% + MA Score ≤3/7
 - Exit long on downtrend confirmation
 - OR MEAN_REVERT + Z >+Zt + ADX <ADXm
 
 **STRONG SELL**
-- TRENDING_DOWN + TSMOM <Tm + ADX >ADXm
+- TRENDING_DOWN + TSMOM_% <-2% + ADX >ADXm
 - High conviction exit on strong downtrend
 - OR Z >+(Zt+0.5) (extreme overbought)
 - OR -Z(VIX) >+1.5 (complacency regime override)
@@ -445,11 +496,11 @@ Drawdown% = ((Trough - Peak) / Peak) × 100
 
 | Regime | Conditions | Trading Approach |
 |--------|-----------|------------------|
-| **TRENDING_UP** | ADX >25, +DI > -DI, TSMOM ≥0.67 | Follow trend, buy dips |
-| **TRENDING_DOWN** | ADX >25, -DI > +DI, TSMOM <0.33 | Avoid longs, wait for reversal |
+| **TRENDING_UP** | ADX >25, +DI > -DI, TSMOM_% >+2%, MA ≥60% | Follow trend, buy dips |
+| **TRENDING_DOWN** | ADX >25, -DI > +DI, TSMOM_% <-2% | Avoid longs, wait for reversal |
 | **MEAN_REVERT_BUY** | Z <-2, ADX <25, choppy trend | Oversold bounce play |
 | **MEAN_REVERT_SELL** | Z >+2, ADX <25, choppy trend | Overbought fade setup |
-| **CHOPPY** | ADX <20, mixed TSMOM | Avoid, no directional edge |
+| **CHOPPY** | ADX <20, TSMOM_% in -2% to +2% range | Avoid, no directional edge |
 | **NEUTRAL** | None of the above | Monitor, no immediate action |
 
 **Usage in framework:** Determines which signal logic to apply (trend-following vs mean-reversion)
@@ -650,18 +701,26 @@ Sharpe = (Portfolio Return - Risk-Free Rate) / σ_portfolio
 
 **Complete Profile Matrix:**
 
-| Profile | Z-Score | TSMOM | MA Score | ADX |
-|---------|---------|-------|----------|-----|
-| 🥛 Conservative | ±2.0 | ≥1.0 | ≥6/7 | >30 |
-| 📊 Moderate | ±1.75 | ≥0.67 | ≥5/7 | >25 |
-| 🌶️ Aggressive | ±1.5 | ≥0.33 | ≥4/7 | >20 |
+| Profile | Z-Score | TSMOM_% | MA Score | ADX |
+|---------|---------|---------|----------|-----|
+| 🥛 Conservative | ±2.0 | ≥+10% | ≥6/7 | >30 |
+| 📊 Moderate | ±1.75 | ≥+5% | ≥5/7 | >25 |
+| 🌶️ Aggressive | ±1.5 | ≥+2% | ≥4/7 | >20 |
 
 **Interpretation:** All thresholds must be met simultaneously for signal generation (conservative profiles require stricter conditions across all dimensions)
 
 ---
 
-### Dual-Timeframe (Daily/Weekly)
-**Framework approach:** Weekly timeframe for primary analysis (smooths noise, reduces false signals)
+### Dual-Timeframe (Weekly/Daily)
+**Framework approach:**
+- **Weekly timeframe:** Primary signals using TSMOM, Z-score, MA alignment, and ADX
+- **Daily timeframe:** Confirmation signals using TEMA crosses, daily Z-score, and daily ADX
+
+**Decision Logic:**
+- Weekly determines **direction** (trend/regime identification)
+- Daily determines **timing** (entry/exit precision)
+
+**Example:** Weekly shows BUY signal + Daily shows Bullish TEMA cross = STRONG BUY (highest conviction)
 
 ---
 
@@ -730,6 +789,7 @@ Sharpe = (Portfolio Return - Risk-Free Rate) / σ_portfolio
 - **QE:** Quantitative Easing
 - **RRP:** Reverse Repo (RRPONTSYD)
 - **S&P 500:** Standard & Poor's 500 Index
+- **TEMA:** Triple Exponential Moving Average
 - **TGA:** Treasury General Account (WTREGEN)
 - **TSMOM:** Time-Series Momentum
 - **TSE:** Tokyo Stock Exchange
@@ -757,4 +817,4 @@ Sharpe = (Portfolio Return - Risk-Free Rate) / σ_portfolio
 
 ---
 
-*Last updated: 2026-01-07*
+*Last updated: 2026-01-10*

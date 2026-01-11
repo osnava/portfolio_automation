@@ -9,14 +9,28 @@ A systematic approach to multi-asset analysis combining macro liquidity metrics,
   - Global Liquidity Index (GLI) - Net Fed liquidity after TGA and RRP adjustments
   - VIX volatility regime classification via normalized Z-Score transformation
   - Sentiment indicators (Fear & Greed indices) for mean reversion signals
-- **Statistical Technical Analysis** (Weekly timeframe)
+- **Statistical Technical Analysis**
 
-  - Time-Series Momentum (TSMOM) - Multi-period momentum score (4w/12w/26w lookbacks)
+  **Weekly Timeframe:**
+  - Time-Series Momentum (TSMOM) - Average percentage return across 4w/12w/26w lookbacks
   - MA Score - 7-point moving average alignment indicator (20/50/100/200-period)
   - Regime Classification - TRENDING_UP, TRENDING_DOWN, MEAN_REVERT, CHOPPY, NEUTRAL
   - Directional Movement Index (ADX) for trend strength quantification
   - Rolling Z-Score (20-period) for statistical overbought/oversold levels
-  - Moving average distance metrics (20/50/100/200-period) for trend confirmation
+  - Moving average distance metrics for trend confirmation
+
+  **Daily Timeframe:**
+  - TEMA (Triple Exponential Moving Average) - Fast-response MA for cross detection
+  - Daily Z-Score (20-period) for near-term entry/exit timing
+  - TEMA cross detection (20/50, 50/200) for trend change signals
+  - Daily ADX for intraday trend strength
+  - TEMA alignment scoring (3-point: price, TEMA20, TEMA50, TEMA200)
+
+  **Multi-Timeframe Decision Logic:**
+  - Weekly determines **direction** (trend/regime identification)
+  - Daily determines **timing** (entry/exit precision)
+  - Example: Weekly BUY + Daily Bullish TEMA Cross = STRONG BUY (highest conviction)
+
 - **Universe Coverage**
 
   - Equity ETFs: ISAC, SMH, URA, ROBO, ARKQ
@@ -66,7 +80,41 @@ python weekly_market_tracker.py
 Or specify a custom portfolio file:
 
 ```bash
-python weekly_market_tracker.py assets_mag7.json
+python weekly_market_tracker.py tickers/assets_jorge.json
+```
+
+**Output:** Generates a timestamped XLSX file with 4 sheets:
+- **Macro**: GLI, VIX, -Z(VIX), Fear & Greed indices
+- **Weekly**: Asset signals with TSMOM, Z-Score, MA Score, ADX, Regime
+- **Momentum**: Detailed 4w/12w/26w percentage returns
+- **Daily**: TEMA analysis with cross detection and daily Z-scores
+
+**File format:** `output/YYYYMMDD_HHMM_ANALYSIS.xlsx` (e.g., `20260110_1617_ANALYSIS.xlsx`)
+
+**Features:**
+- ✅ Conditional formatting (color-coded cells: green=positive, red=negative)
+- ✅ Auto-optimized column widths
+- ✅ Numeric data types for Excel formulas
+- ✅ Professional color scheme for quick visual analysis
+- ✅ Adaptive formatting (automatically adjusts to any number of assets)
+
+## Project Structure
+
+```
+trading/
+├── weekly_market_tracker.py    # Main analysis script
+├── sysprompt.md                 # LLM analysis instructions
+├── QF_TERMINOLOGY.md            # Complete terminology reference
+├── README.md                    # This file
+├── requirements.txt             # Python dependencies
+├── .env                         # API keys (create this)
+├── .gitignore                   # Git exclusions
+├── tickers/                     # Portfolio definitions
+│   ├── assets.json              # Default portfolio (11 assets)
+│   ├── assets_jorge.json        # Extended portfolio (73 assets)
+│   └── assets_mag7.json         # Magnificent 7 tech stocks
+└── output/                      # Generated analysis files (gitignored)
+    └── YYYYMMDD_HHMM_ANALYSIS.xlsx
 ```
 
 ### Portfolio Customization
@@ -117,71 +165,77 @@ Create your own portfolio by adding a new JSON file following the same format.
 
 ## Example Output
 
+**Console output during execution:**
 ```
-┌─────────────────────────────┐
-│ WEEKLY MARKET ANALYSIS      │
-│ Tuesday, 2026-01-07 10:15   │
-│ Portfolio: assets           │
-└─────────────────────────────┘
+Fetching market data...
+Date: Saturday, 2026-01-10 19:06
+Portfolio: assets_jorge
+Fetching GLI data...
+Fetching VIX data...
+Fetching Fear & Greed indices...
+Fetching data for 73 assets...
+  - NVDA (weekly + daily)...
+  - TSMC (weekly + daily)...
+  - ASML (weekly + daily)...
+  ...
+  - RKLB (weekly + daily)...
 
-                               MACRO INDICATORS
-┌─────────────────┬────────────┬─────────────┬────────────────────────────────┐
-│ Indicator       │      Value │   Signal    │ Detail                         │
-├─────────────────┼────────────┼─────────────┼────────────────────────────────┤
-│ Global          │    $5,803B │     📈      │ 4w: +3.65% | 12w: +0.34%       │
-│ Liquidity       │            │  Expanding  │                                │
-│ VIX             │      15.27 │   Normal    │                                │
-│ -Z(VIX)         │      +0.90 │   Risk-On   │                                │
-│ F&G Stocks      │         51 │   Neutral   │                                │
-│ F&G Crypto      │         42 │    Fear     │                                │
-└─────────────────┴────────────┴─────────────┴────────────────────────────────┘
+Writing XLSX file...
+  - output/20260110_1906_ANALYSIS.xlsx
 
-                                ASSET ANALYSIS
-┌─────────────┬────────────┬────────┬───────┬──────┬──────┬───────────────────┐
-│ Asset       │      Price │   Z    │ TSMOM │  MA  │ ADX  │ Regime            │
-├─────────────┼────────────┼────────┼───────┼──────┼──────┼───────────────────┤
-│ ISAC.L      │    £102.45 │ +1.23  │ 1.00  │ 7/7  │  31  │ TRENDING_UP       │
-│ SMH         │    $245.78 │ -0.85  │ 0.67  │ 6/7  │  28  │ TRENDING_UP       │
-│ PLTR        │     $85.20 │ +2.15  │ 1.00  │ 7/7  │  45  │ MEAN_REVERT_SELL  │
-│ BTC-USD     │ $92,340.00 │ -1.42  │ 0.33  │ 4/7  │  19  │ CHOPPY            │
-│ ^GSPC       │  $5,918.00 │ +0.55  │ 1.00  │ 7/7  │  26  │ TRENDING_UP       │
-└─────────────┴────────────┴────────┴───────┴──────┴──────┴───────────────────┘
+Applying conditional formatting...
+  - Applied conditional formatting and optimized column widths
+  - Formatting applied
 
-                               MOMENTUM DETAILS
-
-  Asset         4w   12w   26w   MA Distance
- ─────────────────────────────────────────────────────────────────────────────
-  ISAC.L       +2…   +3…   +5…   MA20: 1.8%↑ | MA50: 5.2%↑ | MA100: 12.1%↑ |
-                                 MA200: 18.5%↑
-  SMH          -1…   +2…   +3…   MA20: 0.9%↓ | MA50: 3.1%↑ | MA100: 8.7%↑ |
-                                 MA200: 15.2%↑
-  PLTR         +8…   +12…  +15…  MA20: 8.5%↑ | MA50: 18.2%↑ | MA100: 35.6%↑
-                                 | MA200: 68.9%↑
-
-
-┌─────────────────────────────────────────────────────────────────────────────┐
-│ MACRO REGIME                                                                │
-│ GLI 📈 Expanding (+3.6% 4w) | -Z(VIX) = +0.90 → Risk-On                     │
-│ ✓ GLI EXPANDING: Risk-on favored                                            │
-│                                                                             │
-│ REFERENCE                                                                   │
-│ Z-Score: >+2 OB | <-2 OS | >+2.5 Extreme OB | <-2.5 Extreme OS              │
-│ TSMOM: 1.0=All↑ | 0.67=Mostly↑ | 0.33=Mostly↓ | 0.0=All↓                    │
-│ MA Score: 7/7=Strong↑ | 5-6=↑ | 3-4=Mixed | 0-2=↓                           │
-│ ADX: <20=Weak | 20-25=Mod | >25=Strong                                      │
-│ Regime: TRENDING_UP | TRENDING_DOWN | MEAN_REVERT | CHOPPY                  │
-└─────────────────────────────────────────────────────────────────────────────┘
+Analysis complete. File saved to: output
 ```
+
+**Generated XLSX file structure:**
+
+### Sheet 1: Macro
+| Indicator | Value | Signal | Detail |
+|-----------|-------|--------|--------|
+| GLI | 5777.45 | Expanding | 4w: +1.73% \| 12w: +0.52% |
+| VIX | 17.23 | Normal | - |
+| -Z(VIX) | +0.45 | Neutral | - |
+| F&G Stocks | 48 | Neutral | - |
+| F&G Crypto | 52 | Neutral | - |
+
+### Sheet 2: Weekly
+| Asset | Price | Z-Score | TSMOM_% | MA_Score | MA_Max | ADX | Regime | Regime_Bias |
+|-------|-------|---------|---------|----------|--------|-----|--------|-------------|
+| SMH | 389.22 | +1.84 | +18.43 | 7 | 7 | 30 | TRENDING_UP | Ride trend, buy dips |
+| URA | 50.31 | +1.24 | +15.33 | 7 | 7 | 30 | TRENDING_UP | Ride trend, buy dips |
+| BTC-USD | 90427.41 | -0.97 | -13.96 | 5 | 7 | 26 | TRENDING_DOWN | Avoid or exit |
+
+### Sheet 3: Momentum
+| Asset | 4w_Return_% | 12w_Return_% | 26w_Return_% | MA_Distance |
+|-------|-------------|--------------|--------------|-------------|
+| SMH | +12.5 | +20.8 | +22.0 | MA20: +3.2% \| MA50: +8.9% \| ... |
+| URA | +8.9 | +18.2 | +19.9 | MA20: +2.1% \| MA50: +6.7% \| ... |
+
+### Sheet 4: Daily
+| Asset | Price | Z-Score_Daily | TEMA20 | TEMA50 | TEMA200 | Cross_20_50 | Cross_50_200 | TEMA_Alignment | ADX_Daily |
+|-------|-------|---------------|--------|--------|---------|-------------|--------------|----------------|-----------|
+| SMH | 389.22 | +1.45 | 385.67 | 372.34 | 298.12 | None | None | 3/3 | 28.5 |
+| URA | 50.31 | +0.89 | 49.87 | 47.23 | 41.56 | Bullish Cross | None | 3/3 | 31.2 |
+
+**Color coding:**
+- 🟢 Green: Positive values (TSMOM >0%, returns >0%, above MAs)
+- 🔴 Red: Negative values (TSMOM <0%, returns <0%, below MAs)
+- 🟡 Yellow: Overbought Z-scores (+2.0 and above)
+- ⚪ White: Neutral values
 
 ## LLM-Enhanced Signal Generation
 
-Augment quantitative signals with qualitative factor analysis by integrating output with large language models configured via `sysprompt.md`:
+Augment quantitative signals with qualitative factor analysis by integrating XLSX output with large language models configured via `sysprompt.md`:
 
-1. Execute analysis routine and capture output
-2. Configure LLM with system prompt from `sysprompt.md`
-3. Select risk profile: 🥛 Conservative, 📊 Moderate, or 🌶️ Aggressive
-4. **Enable extended reasoning mode** for optimal inference quality
-5. Extract actionable alpha signals (STRONG BUY, BUY, WAIT, SELL, STRONG SELL) and portfolio rebalancing recommendations
+1. Execute analysis routine to generate XLSX file
+2. Upload XLSX file to LLM (Claude, ChatGPT, Gemini)
+3. Configure LLM with system prompt from `sysprompt.md`
+4. Select risk profile: 🥛 Conservative, 📊 Moderate, or 🌶️ Aggressive
+5. **Enable extended reasoning mode** for optimal inference quality (Claude "thinking", ChatGPT "o1", Gemini "thinking")
+6. LLM analyzes all 4 sheets and generates actionable signals (STRONG BUY, BUY, WAIT, SELL, STRONG SELL) with portfolio rebalancing recommendations
 
 ### Recommended Models (as of Dec 2025)
 
@@ -215,22 +269,23 @@ Representative LLM-generated analysis using `sysprompt.md` configuration (Modera
 
 **Table 2: Ticker Signals**
 
-| Ticker | Price   | Z-Score | TSMOM | Regime           | Signal      | Key Drivers                                    |
-| ------ | ------- | ------- | ----- | ---------------- | ----------- | ---------------------------------------------- |
-| ISAC.L | £102.45 | +1.23   | 1.00  | TRENDING_UP      | BUY         | Strong trend + TSMOM 1.0 + MA 7/7 + ADX 31    |
-| SMH    | $245.78 | -0.85   | 0.67  | TRENDING_UP      | STRONG BUY  | Oversold + uptrend + TSMOM ≥0.67               |
-| PLTR   | $85.20  | +2.15   | 1.00  | MEAN_REVERT_SELL | SELL        | Extreme overbought Z +2.15, mean reversion due |
-| BTC    | $92,340 | -1.42   | 0.33  | CHOPPY           | WAIT        | TSMOM 0.33 below threshold (0.67), ADX weak    |
-| ^GSPC  | $5,918  | +0.55   | 1.00  | TRENDING_UP      | BUY         | Trend intact, not overbought, TSMOM 1.0        |
+| Ticker | Price   | Z-Score | TSMOM_% | Regime           | Signal      | Key Drivers                                        |
+| ------ | ------- | ------- | ------- | ---------------- | ----------- | -------------------------------------------------- |
+| SMH    | $389.22 | +1.84   | +18.43  | TRENDING_UP      | WAIT        | Overbought Z +1.84, strong momentum but extended   |
+| URA    | $50.31  | +1.24   | +15.33  | TRENDING_UP      | BUY         | Strong trend + TSMOM +15.33% + MA 7/7 + ADX 30    |
+| GC=F   | $4490   | +1.50   | +15.30  | TRENDING_UP      | BUY         | Gold uptrend, strong momentum, ADX 64 very strong  |
+| BTC    | $90,427 | -0.97   | -13.96  | TRENDING_DOWN    | WAIT        | Negative momentum -13.96%, wait for reversal      |
+| PLTR   | $177.49 | +0.12   | +1.18   | NEUTRAL          | WAIT        | TSMOM +1.18% below threshold (+5%), no clear edge |
 
 **Table 3: Rebalance Actions**
 
-| Action | From | To     | Rationale                                                |
-| ------ | ---- | ------ | -------------------------------------------------------- |
-| BUY    | Cash | SMH    | STRONG BUY: Oversold + TRENDING_UP + all thresholds met |
-| BUY    | Cash | ^GSPC  | BUY: Clean trend signal, broad market exposure           |
-| SELL   | PLTR | Cash   | Z +2.15 extreme OB, take profits on parabolic move       |
-| WAIT   | -    | BTC    | Momentum conflict, await TSMOM ≥0.67 for entry           |
+| Action | From | To     | Rationale                                                    |
+| ------ | ---- | ------ | ------------------------------------------------------------ |
+| BUY    | Cash | URA    | BUY: Strong uptrend + TSMOM +15.33% + MA 7/7 + ADX 30       |
+| BUY    | Cash | GC=F   | BUY: Gold trending up + TSMOM +15.30% + very strong ADX 64  |
+| TRIM   | SMH  | Cash   | Trim 25-50%: Overbought Z +1.84, lock profits on extension  |
+| WAIT   | -    | BTC    | WAIT: Negative momentum -13.96%, await reversal confirmation |
+| WAIT   | -    | PLTR   | WAIT: TSMOM +1.18% below +5% threshold, no clear edge       |
 
 ## Global Liquidity Index (GLI) Methodology
 
@@ -273,13 +328,15 @@ Fed Balance Sheet    = Gross liquidity injection (QE programs)
 ## Signal Interpretation Guide
 
 - **Regime Classification**: TRENDING_UP | TRENDING_DOWN | MEAN_REVERT_BUY/SELL | CHOPPY | NEUTRAL
-- **TSMOM (Momentum)**: 1.0 All positive | 0.67 Mostly positive | 0.33 Mostly negative | 0.0 All negative
+- **TSMOM_% (Momentum)**: >+15% Strong positive | +5% to +15% Moderate | +2% to +5% Weak | -2% to +2% Neutral/choppy | <-5% Negative
 - **MA Score (Alignment)**: 7/7 Strong uptrend | 5-6/7 Uptrend | 3-4/7 Mixed | 0-2/7 Downtrend
 - **ADX (Trend Strength)**: <20 Weak | 20-25 Moderate | >25 Strong | >40 Very strong
 - **Z-Score (Price Deviation)**: >+2 Statistical OB | <-2 Statistical OS | >+2.5 Extreme | <-2.5 Extreme
 - **-Z(VIX) Regime**: >+1.5 Complacency | <-1.5 Elevated fear | +/-0.5-1.5 Transitional
 - **Sentiment Index**: 0-25 Extreme Fear | 26-45 Fear | 46-55 Neutral | 56-75 Greed | 76-100 Extreme Greed
-- **GLI Trend**: Expanding >1% | Contracting <-1% | Neutral
+- **GLI Trend**: Expanding >+1% | Contracting <-1% | Neutral
+- **TEMA Alignment**: 3/3 Perfect bullish | 2/3 Moderate bullish | 1/3 Mixed | 0/3 Bearish
+- **TEMA Crosses**: Bullish Cross (fast > slow) | Bearish Cross (fast < slow) | None
 - **Signals**: STRONG BUY | BUY | WAIT | SELL | STRONG SELL
 
 ## Technical Stack
@@ -291,7 +348,7 @@ Fed Balance Sheet    = Gross liquidity injection (QE programs)
 - **requests** - HTTP client for FRED API integration
 - **python-dotenv** - Environment configuration management
 - **fear-and-greed** - CNN sentiment index data retrieval
-- **rich** - Terminal styling and formatted output (tables, colors, panels)
+- **openpyxl** - Excel file generation with conditional formatting and styling
 
 ## License
 
