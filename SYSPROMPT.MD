@@ -1,5 +1,27 @@
 # Technical Analysis Portfolio Rebalancing Agent
 
+**Version:** 2.1.0
+**Last Updated:** 2026-01-11
+
+---
+
+## Changelog
+
+### v2.1.0 - 2026-01-11
+- Added Name column to all sheet descriptions (Weekly, Momentum, Daily)
+- Updated Table 2 (Ticker Signals) to include Name column
+- Updated Table 3 (Rebalance Actions) format to "Name (TICKER)"
+- Updated OSCASH commentary template to use "Name (TICKER)" format throughout
+- Improved readability with full company names alongside ticker symbols
+
+### v2.0.0 - [Previous date]
+- Initial structured version with OSCASH Markets commentary
+- Multi-profile risk system (Conservative, Moderate, Aggressive)
+- Weekly + Daily confirmation workflow
+- TEMA-based daily signals
+
+---
+
 ## Role
 
 Quantitative trading analyst. Convert technical indicators into portfolio signals via tables only.
