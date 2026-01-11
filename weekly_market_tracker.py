@@ -599,24 +599,24 @@ def apply_conditional_formatting(xlsx_path, num_rows):
         ws = wb['Weekly']
 
         # Z-Score: -2 (red) → 0 (white) → +2 (yellow/orange)
-        ws.conditional_formatting.add(f'C2:C{num_rows+1}',
+        ws.conditional_formatting.add(f'D2:D{num_rows+1}',
             ColorScaleRule(start_type='num', start_value=-2, start_color='F8696B',  # Red
                           mid_type='num', mid_value=0, mid_color='FFFFFF',          # White
                           end_type='num', end_value=2, end_color='FFEB84'))         # Yellow
 
         # TSMOM_%: -20 (red) → 0 (white) → +20 (green)
-        ws.conditional_formatting.add(f'D2:D{num_rows+1}',
+        ws.conditional_formatting.add(f'E2:E{num_rows+1}',
             ColorScaleRule(start_type='num', start_value=-20, start_color='F8696B',  # Red
                           mid_type='num', mid_value=0, mid_color='FFFFFF',           # White
                           end_type='num', end_value=20, end_color='63BE7B'))         # Green
 
         # MA_Score: 0 (white) → 7 (green)
-        ws.conditional_formatting.add(f'E2:E{num_rows+1}',
+        ws.conditional_formatting.add(f'F2:F{num_rows+1}',
             ColorScaleRule(start_type='num', start_value=0, start_color='FFFFFF',   # White
                           end_type='num', end_value=7, end_color='63BE7B'))          # Green
 
         # ADX: 10 (white) → 50 (green)
-        ws.conditional_formatting.add(f'G2:G{num_rows+1}',
+        ws.conditional_formatting.add(f'H2:H{num_rows+1}',
             ColorScaleRule(start_type='num', start_value=10, start_color='FFFFFF',  # White
                           end_type='num', end_value=50, end_color='63BE7B'))         # Green
 
@@ -628,7 +628,7 @@ def apply_conditional_formatting(xlsx_path, num_rows):
         ws = wb['Momentum']
 
         # All return columns: -30 (red) → 0 (white) → +30 (green)
-        for col in ['B', 'C', 'D']:  # 4w, 12w, 26w returns
+        for col in ['C', 'D', 'E']:  # 4w, 12w, 26w returns
             ws.conditional_formatting.add(f'{col}2:{col}{num_rows+1}',
                 ColorScaleRule(start_type='num', start_value=-30, start_color='F8696B',  # Red
                               mid_type='num', mid_value=0, mid_color='FFFFFF',           # White
@@ -642,20 +642,20 @@ def apply_conditional_formatting(xlsx_path, num_rows):
         ws = wb['Daily']
 
         # Z-Score_Daily: -2 (red) → 0 (white) → +2 (yellow)
-        ws.conditional_formatting.add(f'C2:C{num_rows+1}',
+        ws.conditional_formatting.add(f'D2:D{num_rows+1}',
             ColorScaleRule(start_type='num', start_value=-2, start_color='F8696B',
                           mid_type='num', mid_value=0, mid_color='FFFFFF',
                           end_type='num', end_value=2, end_color='FFEB84'))
 
         # TEMA distance %: -10 (red) → 0 (white) → +10 (green)
-        for col in ['H', 'I', 'J']:  # TEMA20/50/200 distances
+        for col in ['I', 'J', 'K']:  # TEMA20/50/200 distances
             ws.conditional_formatting.add(f'{col}2:{col}{num_rows+1}',
                 ColorScaleRule(start_type='num', start_value=-10, start_color='F8696B',
                               mid_type='num', mid_value=0, mid_color='FFFFFF',
                               end_type='num', end_value=10, end_color='63BE7B'))
 
         # ADX_Daily: 10 (white) → 50 (green)
-        ws.conditional_formatting.add(f'N2:N{num_rows+1}',
+        ws.conditional_formatting.add(f'O2:O{num_rows+1}',
             ColorScaleRule(start_type='num', start_value=10, start_color='FFFFFF',
                           end_type='num', end_value=50, end_color='63BE7B'))
 
@@ -663,13 +663,13 @@ def apply_conditional_formatting(xlsx_path, num_rows):
         green_fill = PatternFill(start_color='C6EFCE', end_color='C6EFCE', fill_type='solid')
         red_fill = PatternFill(start_color='FFC7CE', end_color='FFC7CE', fill_type='solid')
 
-        ws.conditional_formatting.add(f'K2:K{num_rows+1}',
+        ws.conditional_formatting.add(f'L2:L{num_rows+1}',
             CellIsRule(operator='equal', formula=['"Bullish Cross"'], fill=green_fill))
-        ws.conditional_formatting.add(f'K2:K{num_rows+1}',
+        ws.conditional_formatting.add(f'L2:L{num_rows+1}',
             CellIsRule(operator='equal', formula=['"Bearish Cross"'], fill=red_fill))
-        ws.conditional_formatting.add(f'L2:L{num_rows+1}',
+        ws.conditional_formatting.add(f'M2:M{num_rows+1}',
             CellIsRule(operator='equal', formula=['"Bullish Cross"'], fill=green_fill))
-        ws.conditional_formatting.add(f'L2:L{num_rows+1}',
+        ws.conditional_formatting.add(f'M2:M{num_rows+1}',
             CellIsRule(operator='equal', formula=['"Bearish Cross"'], fill=red_fill))
 
         # Optimize column widths
@@ -786,7 +786,8 @@ def main():
         if tech:
             # Asset analysis row - use numeric types for Excel
             asset_rows.append({
-                'Asset': ticker,
+                'Name': name,
+                'Ticker': ticker,
                 'Price': round(tech['price'], 4),
                 'Z-Score': round(tech['zscore'], 2) if tech['zscore'] is not None else None,
                 'TSMOM_%': round(tech['tsmom_score'], 2) if tech['tsmom_score'] is not None else None,
@@ -806,7 +807,8 @@ def main():
                 ret_26w = float(details[2].split(': ')[1].rstrip('%')) if len(details) > 2 else None
 
                 momentum_rows.append({
-                    'Asset': ticker,
+                    'Name': name,
+                    'Ticker': ticker,
                     '4w_Return_%': ret_4w,
                     '12w_Return_%': ret_12w,
                     '26w_Return_%': ret_26w,
@@ -814,7 +816,8 @@ def main():
                 })
         else:
             asset_rows.append({
-                'Asset': ticker,
+                'Name': name,
+                'Ticker': ticker,
                 'Price': None,
                 'Z-Score': None,
                 'TSMOM_%': None,
@@ -829,7 +832,8 @@ def main():
         daily_tech = daily_data.get(name)
         if daily_tech:
             daily_rows.append({
-                'Asset': ticker,
+                'Name': name,
+                'Ticker': ticker,
                 'Price': round(daily_tech['price'], 4),
                 'Z-Score_Daily': round(daily_tech['zscore_daily'], 2) if daily_tech['zscore_daily'] is not None else None,
                 'Z-Score_Zone': daily_tech['zscore_zone_daily'],
@@ -847,7 +851,8 @@ def main():
             })
         else:
             daily_rows.append({
-                'Asset': ticker,
+                'Name': name,
+                'Ticker': ticker,
                 'Price': None,
                 'Z-Score_Daily': None,
                 'Z-Score_Zone': None,
