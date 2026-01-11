@@ -7,7 +7,7 @@
   "Palantir Technologies Inc.": "PLTR",
   "Bitcoin USD": "BTC-USD",
   "Ethereum USD": "ETH-USD",
-  "S&P 500": "^GSPC",
-  "Gold Futures": "GC=F",
-  "Silver Futures": "SI=F"
+  "SPDR S&P 500 ETF Trust": "SPY",
+  "SPDR Gold Shares": "GLD",
+  "iShares Silver Trust": "SLV"
 }
