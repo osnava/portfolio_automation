@@ -15,8 +15,9 @@ import yfinance as yf
 from dotenv import load_dotenv
 from ta.trend import ADXIndicator
 from openpyxl import load_workbook
-from openpyxl.formatting.rule import ColorScaleRule, CellIsRule
+from openpyxl.formatting.rule import ColorScaleRule, CellIsRule, Rule
 from openpyxl.styles import PatternFill
+from openpyxl.styles.differential import DifferentialStyle
 
 warnings.filterwarnings('ignore')
 
@@ -177,6 +178,123 @@ def calculate_tema(series, period):
     ema3 = ema2.ewm(span=period, adjust=False).mean()
     tema = 3 * ema1 - 3 * ema2 + ema3
     return tema
+
+
+def get_volatility_scalar(close, lookback=252):
+    """
+    Calculate volatility scalar for adaptive period selection.
+    Returns ratio of current ATR vs historical median ATR.
+
+    High volatility (ratio > 1) → use longer periods to filter noise
+    Low volatility (ratio < 1) → use shorter periods to capture moves
+
+    Clamped to [0.5, 2.0] to prevent extreme period adjustments.
+    """
+    if len(close) < lookback:
+        return 1.0  # Default to no adjustment if insufficient data
+
+    # Calculate ATR (14-day rolling mean of absolute returns)
+    atr = close.diff().abs().rolling(14).mean()
+
+    # Current ATR vs historical median
+    atr_current = atr.iloc[-1]
+    atr_historical = atr.rolling(lookback).median().iloc[-1]
+
+    if atr_historical == 0 or pd.isna(atr_historical):
+        return 1.0
+
+    ratio = atr_current / atr_historical
+
+    # Clamp to prevent extreme values
+    return np.clip(ratio, 0.5, 2.0)
+
+
+def calculate_tema_ensemble(close, price):
+    """
+    Multi-period TEMA ensemble with volatility adjustment.
+
+    Calculates TEMA alignment across 3 period sets (fast/standard/slow),
+    adjusted by current volatility. Returns consensus signal and confidence.
+
+    Returns:
+        - consensus: -1.0 to +1.0 (signal strength)
+        - confidence: 0.0 to 1.0 (agreement level)
+        - ensemble_str: "X/3" format (e.g., "3/3", "2/3")
+        - detail: Human-readable breakdown
+    """
+    # Get volatility scalar
+    vol_scalar = get_volatility_scalar(close)
+
+    # Base period sets (fast, mid, slow)
+    base_periods = [
+        (15, 40, 150),   # Fast: Catches early moves, more whipsaws
+        (20, 50, 200),   # Standard: Industry standard
+        (30, 75, 250),   # Slow: Filters noise, lags entries
+    ]
+
+    # Apply volatility adjustment
+    adjusted_periods = [
+        (int(fast * vol_scalar), int(mid * vol_scalar), int(slow * vol_scalar))
+        for fast, mid, slow in base_periods
+    ]
+
+    alignment_signals = []
+    details = []
+
+    for (p_fast, p_mid, p_slow), (base_fast, base_mid, base_slow) in zip(adjusted_periods, base_periods):
+        # Calculate TEMAs for this period set
+        try:
+            tema_fast = calculate_tema(close, p_fast).iloc[-1]
+            tema_mid = calculate_tema(close, p_mid).iloc[-1]
+            tema_slow = calculate_tema(close, p_slow).iloc[-1]
+        except:
+            # Skip this period set if calculation fails
+            continue
+
+        # Count bullish/bearish components
+        score = 0
+        if price > tema_fast:
+            score += 1
+        if tema_fast > tema_mid:
+            score += 1
+        if tema_mid > tema_slow:
+            score += 1
+
+        # Convert to signal: 3=bullish, 0=bearish, else=mixed
+        if score == 3:
+            signal = +1  # All bullish
+        elif score == 0:
+            signal = -1  # All bearish
+        else:
+            signal = 0   # Mixed
+
+        alignment_signals.append(signal)
+
+        # Detail string showing base periods and signal
+        signal_str = "+" if signal > 0 else ("-" if signal < 0 else "~")
+        details.append(f"{base_fast}/{base_mid}/{base_slow}:{signal_str}")
+
+    # Calculate consensus and confidence
+    if not alignment_signals:
+        return 0.0, 0.0, "0/3", "Error", vol_scalar
+
+    consensus = sum(alignment_signals) / len(alignment_signals)
+    confidence = abs(consensus)
+
+    # Count strong signals
+    bullish_count = sum(1 for s in alignment_signals if s > 0)
+    bearish_count = sum(1 for s in alignment_signals if s < 0)
+
+    if consensus > 0:
+        ensemble_str = f"{bullish_count}/3"
+    elif consensus < 0:
+        ensemble_str = f"-{bearish_count}/3"
+    else:
+        ensemble_str = "0/3"
+
+    detail = " | ".join(details)
+
+    return round(consensus, 2), round(confidence, 2), ensemble_str, detail, round(vol_scalar, 2)
 
 
 def detect_cross(ma_fast, ma_fast_prev, ma_slow, ma_slow_prev):
@@ -515,6 +633,20 @@ def calculate_daily_technicals(ticker):
     tema50_dist = ((price - tema50_curr) / tema50_curr) * 100
     tema200_dist = ((price - tema200_curr) / tema200_curr) * 100
 
+    # Multi-period TEMA ensemble with volatility adjustment
+    consensus, confidence, ensemble_str, ensemble_detail, vol_scalar = calculate_tema_ensemble(close, price)
+
+    # Enhanced trend classification using ensemble
+    if confidence >= 0.67:  # At least 2/3 periods agree
+        if consensus > 0:
+            trend_ensemble = "Strong Bullish" if confidence == 1.0 else "Bullish"
+        elif consensus < 0:
+            trend_ensemble = "Strong Bearish" if confidence == 1.0 else "Bearish"
+        else:
+            trend_ensemble = "Mixed"
+    else:
+        trend_ensemble = "Low Confidence"
+
     return {
         'price': price,
         'zscore_daily': zscore_daily,
@@ -532,6 +664,12 @@ def calculate_daily_technicals(ticker):
         'plus_di_daily': round(plus_di_daily, 1),
         'minus_di_daily': round(minus_di_daily, 1),
         'trend_daily': trend_daily,
+        # NEW: Ensemble metrics
+        'tema_consensus': consensus,
+        'tema_confidence': confidence,
+        'tema_ensemble': ensemble_str,
+        'trend_ensemble': trend_ensemble,
+        'vol_scalar': vol_scalar,
     }
 
 
@@ -641,36 +779,39 @@ def apply_conditional_formatting(xlsx_path, num_rows):
     if 'Daily' in wb.sheetnames:
         ws = wb['Daily']
 
-        # Z-Score_Daily: -2 (red) → 0 (white) → +2 (yellow)
+        # Z-Score: -2 (red) → 0 (white) → +2 (yellow)
         ws.conditional_formatting.add(f'D2:D{num_rows+1}',
             ColorScaleRule(start_type='num', start_value=-2, start_color='F8696B',
                           mid_type='num', mid_value=0, mid_color='FFFFFF',
                           end_type='num', end_value=2, end_color='FFEB84'))
 
-        # TEMA distance %: -10 (red) → 0 (white) → +10 (green)
-        for col in ['I', 'J', 'K']:  # TEMA20/50/200 distances
-            ws.conditional_formatting.add(f'{col}2:{col}{num_rows+1}',
-                ColorScaleRule(start_type='num', start_value=-10, start_color='F8696B',
-                              mid_type='num', mid_value=0, mid_color='FFFFFF',
-                              end_type='num', end_value=10, end_color='63BE7B'))
-
-        # ADX_Daily: 10 (white) → 50 (green)
-        ws.conditional_formatting.add(f'O2:O{num_rows+1}',
+        # ADX: 10 (white) → 50 (green)
+        ws.conditional_formatting.add(f'G2:G{num_rows+1}',
             ColorScaleRule(start_type='num', start_value=10, start_color='FFFFFF',
                           end_type='num', end_value=50, end_color='63BE7B'))
 
-        # Cross detection: Highlight bullish crosses in light green, bearish in light red
+        # Crosses: Highlight Bullish in green, Bearish in red
         green_fill = PatternFill(start_color='C6EFCE', end_color='C6EFCE', fill_type='solid')
         red_fill = PatternFill(start_color='FFC7CE', end_color='FFC7CE', fill_type='solid')
 
-        ws.conditional_formatting.add(f'L2:L{num_rows+1}',
-            CellIsRule(operator='equal', formula=['"Bullish Cross"'], fill=green_fill))
-        ws.conditional_formatting.add(f'L2:L{num_rows+1}',
-            CellIsRule(operator='equal', formula=['"Bearish Cross"'], fill=red_fill))
-        ws.conditional_formatting.add(f'M2:M{num_rows+1}',
-            CellIsRule(operator='equal', formula=['"Bullish Cross"'], fill=green_fill))
-        ws.conditional_formatting.add(f'M2:M{num_rows+1}',
-            CellIsRule(operator='equal', formula=['"Bearish Cross"'], fill=red_fill))
+        # Use formula-based rules for text contains
+        ws.conditional_formatting.add(f'F2:F{num_rows+1}',
+            Rule(type='containsText', operator='containsText', formula=['SEARCH("Bullish",F2)'],
+                 dxf=DifferentialStyle(fill=green_fill), text='Bullish'))
+        ws.conditional_formatting.add(f'F2:F{num_rows+1}',
+            Rule(type='containsText', operator='containsText', formula=['SEARCH("Bearish",F2)'],
+                 dxf=DifferentialStyle(fill=red_fill), text='Bearish'))
+
+        # Consensus: -1 (red) → 0 (white) → +1 (green)
+        ws.conditional_formatting.add(f'H2:H{num_rows+1}',
+            ColorScaleRule(start_type='num', start_value=-1, start_color='F8696B',
+                          mid_type='num', mid_value=0, mid_color='FFFFFF',
+                          end_type='num', end_value=1, end_color='63BE7B'))
+
+        # Confidence: 0 (white) → 1 (green)
+        ws.conditional_formatting.add(f'I2:I{num_rows+1}',
+            ColorScaleRule(start_type='num', start_value=0, start_color='FFFFFF',
+                          end_type='num', end_value=1, end_color='63BE7B'))
 
         # Optimize column widths
         optimize_column_widths(ws)
@@ -831,42 +972,45 @@ def main():
         # Daily technicals row - use numeric types for Excel
         daily_tech = daily_data.get(name)
         if daily_tech:
+            # Consolidate TEMA distances into one readable string
+            tema_dist = f"20:{daily_tech['tema20_dist']:+.1f}% | 50:{daily_tech['tema50_dist']:+.1f}% | 200:{daily_tech['tema200_dist']:+.1f}%"
+
+            # Consolidate crosses into one column
+            crosses = []
+            if daily_tech['cross_20_50'] != 'None':
+                crosses.append(f"20x50:{daily_tech['cross_20_50'].replace(' Cross', '')}")
+            if daily_tech['cross_50_200'] != 'None':
+                crosses.append(f"50x200:{daily_tech['cross_50_200'].replace(' Cross', '')}")
+            crosses_str = " | ".join(crosses) if crosses else "None"
+
             daily_rows.append({
                 'Name': name,
                 'Ticker': ticker,
                 'Price': round(daily_tech['price'], 4),
-                'Z-Score_Daily': round(daily_tech['zscore_daily'], 2) if daily_tech['zscore_daily'] is not None else None,
-                'Z-Score_Zone': daily_tech['zscore_zone_daily'],
-                'TEMA20': round(daily_tech['tema20'], 2),
-                'TEMA50': round(daily_tech['tema50'], 2),
-                'TEMA200': round(daily_tech['tema200'], 2),
-                'TEMA20_Dist_%': round(daily_tech['tema20_dist'], 2),
-                'TEMA50_Dist_%': round(daily_tech['tema50_dist'], 2),
-                'TEMA200_Dist_%': round(daily_tech['tema200_dist'], 2),
-                'Cross_20_50': daily_tech['cross_20_50'],
-                'Cross_50_200': daily_tech['cross_50_200'],
-                'TEMA_Alignment': daily_tech['tema_alignment'],  # Keep as "X/3" string
-                'ADX_Daily': round(daily_tech['adx_daily'], 1),
-                'Trend_Daily': daily_tech['trend_daily'],
+                'Z-Score': round(daily_tech['zscore_daily'], 2) if daily_tech['zscore_daily'] is not None else None,
+                'TEMA_Dist': tema_dist,
+                'Crosses': crosses_str,
+                'ADX': round(daily_tech['adx_daily'], 1),
+                'Consensus': round(daily_tech['tema_consensus'], 2),
+                'Confidence': round(daily_tech['tema_confidence'], 2),
+                'Ensemble': daily_tech['tema_ensemble'],
+                'Trend': daily_tech['trend_ensemble'],
+                'Vol_Scalar': round(daily_tech['vol_scalar'], 2),
             })
         else:
             daily_rows.append({
                 'Name': name,
                 'Ticker': ticker,
                 'Price': None,
-                'Z-Score_Daily': None,
-                'Z-Score_Zone': None,
-                'TEMA20': None,
-                'TEMA50': None,
-                'TEMA200': None,
-                'TEMA20_Dist_%': None,
-                'TEMA50_Dist_%': None,
-                'TEMA200_Dist_%': None,
-                'Cross_20_50': 'Error',
-                'Cross_50_200': 'Error',
-                'TEMA_Alignment': None,
-                'ADX_Daily': None,
-                'Trend_Daily': 'Error',
+                'Z-Score': None,
+                'TEMA_Dist': 'Error',
+                'Crosses': 'Error',
+                'ADX': None,
+                'Consensus': None,
+                'Confidence': None,
+                'Ensemble': 'Error',
+                'Trend': 'Error',
+                'Vol_Scalar': None,
             })
 
     # Write XLSX file with multiple sheets
