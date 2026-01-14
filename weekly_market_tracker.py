@@ -3,9 +3,11 @@
 
 import json
 import os
+import pickle
 import sys
+import time
 import warnings
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 import numpy as np
@@ -52,6 +54,107 @@ def load_assets(file_path=None):
 MA_PERIODS = [20, 50, 100, 200]
 ZSCORE_WINDOW = 20
 
+# CACHE CONFIGURATION
+CACHE_DIR = SCRIPT_DIR / ".cache"
+CACHE_DIR.mkdir(exist_ok=True)
+
+
+def get_cache_path(cache_key):
+    """Get cache file path for today."""
+    today = datetime.now().strftime('%Y%m%d')
+    return CACHE_DIR / f"{cache_key}_{today}.json"
+
+
+def load_from_cache(cache_key):
+    """Load data from cache if exists and is from today."""
+    cache_file = get_cache_path(cache_key)
+    if cache_file.exists():
+        try:
+            with open(cache_file, 'r') as f:
+                return json.load(f)
+        except (json.JSONDecodeError, IOError):
+            pass
+    return None
+
+
+def save_to_cache(cache_key, data):
+    """Save data to cache with today's date."""
+    cache_file = get_cache_path(cache_key)
+    # Clean old cache files for this key
+    for old_file in CACHE_DIR.glob(f"{cache_key}_*.json"):
+        if old_file != cache_file:
+            old_file.unlink()
+    with open(cache_file, 'w') as f:
+        json.dump(data, f)
+
+
+def cleanup_orphan_caches(max_age_days=7):
+    """Remove orphan cache files older than max_age_days."""
+    cutoff_time = time.time() - (max_age_days * 86400)
+    for cache_file in CACHE_DIR.glob("*_historical.pkl"):
+        if cache_file.stat().st_mtime < cutoff_time:
+            cache_file.unlink()
+
+
+def get_cached_ticker(ticker, period, interval):
+    """
+    Smart persistent cache for yfinance data.
+    Returns cached data if last bar is recent, otherwise fetches fresh data.
+
+    Best practices:
+    - Uses auto_adjust=True for split/dividend adjusted prices
+    - Handles timezone-aware datetimes properly
+    - Validates data before caching
+    """
+    cache_file = CACHE_DIR / f"{ticker}_{interval}_historical.pkl"
+
+    # Load existing cache
+    if cache_file.exists():
+        try:
+            cached_data = pd.read_pickle(cache_file)
+            if not cached_data.empty and len(cached_data) > 0:
+                # Convert timezone-aware to date for comparison
+                last_date = cached_data.index[-1]
+                if hasattr(last_date, 'date'):
+                    last_date = last_date.date()
+                else:
+                    last_date = pd.Timestamp(last_date).date()
+
+                # If last bar is today or yesterday, use cache
+                yesterday = (datetime.now() - timedelta(days=1)).date()
+                if last_date >= yesterday:
+                    return cached_data
+        except (FileNotFoundError, EOFError, pd.errors.EmptyDataError, pickle.PickleError):
+            pass
+
+    # Fetch fresh data with best practices
+    try:
+        data = yf.download(
+            ticker,
+            period=period,
+            interval=interval,
+            auto_adjust=True,  # Adjust for splits/dividends
+            progress=False,
+            ignore_tz=False  # Preserve timezone info
+        )
+
+        # Handle MultiIndex columns (happens with single ticker sometimes)
+        if isinstance(data.columns, pd.MultiIndex):
+            data.columns = data.columns.get_level_values(0)
+
+        # Validate data before caching
+        if not data.empty and len(data) > 0 and 'Close' in data.columns:
+            data.to_pickle(cache_file)
+            return data
+        else:
+            # Return empty DataFrame if download failed
+            return pd.DataFrame()
+
+    except Exception as e:
+        print(f"Warning: Failed to download {ticker}: {e}")
+        return pd.DataFrame()
+
+
 # DATA FETCHING
 
 def get_fred_series(series_id, limit=1):
@@ -78,27 +181,50 @@ def get_fred_series(series_id, limit=1):
 
 def get_fear_greed_traditional():
     """Fetch CNN Fear & Greed Index using fear-and-greed package."""
-    import fear_and_greed
+    cache_key = "fear_greed_stocks"
+    cached = load_from_cache(cache_key)
+    if cached:
+        return cached['value'], cached['description']
+
+    try:
+        import fear_and_greed
+    except ImportError:
+        raise ImportError(
+            "fear-and-greed package not installed.\n"
+            "Install with: pip install fear-and-greed"
+        )
+
     data = fear_and_greed.get()
-    return round(data.value), data.description.title()
+    result = {'value': round(data.value), 'description': data.description.title()}
+    save_to_cache(cache_key, result)
+    return result['value'], result['description']
 
 
 def get_fear_greed_crypto():
     """Fetch Crypto Fear & Greed Index."""
+    cache_key = "fear_greed_crypto"
+    cached = load_from_cache(cache_key)
+    if cached:
+        return cached['value'], cached['classification']
+
     r = requests.get("https://api.alternative.me/fng/?limit=1", timeout=10)
     r.raise_for_status()
     data = r.json()['data'][0]
-    return int(data['value']), data['value_classification'].title()
+    result = {'value': int(data['value']), 'classification': data['value_classification'].title()}
+    save_to_cache(cache_key, result)
+    return result['value'], result['classification']
 
 
 def get_vix_zscore():
     """Fetch VIX and calculate smoothed inverted Z-score (252-day rolling window, 5-period EMA)."""
-    hist = yf.download("^VIX", period="2y", interval="1d", progress=False)
+    cache_key = "vix_zscore"
+    cached = load_from_cache(cache_key)
+    if cached:
+        return cached['vix'], cached['z_score']
+
+    hist = get_cached_ticker("^VIX", period="2y", interval="1d")
     if hist.empty or len(hist) < 252:
         return None, None
-
-    if isinstance(hist.columns, pd.MultiIndex):
-        hist.columns = hist.columns.get_level_values(0)
 
     vix_series = hist['Close']
     vix = round(vix_series.iloc[-1], 2)
@@ -112,13 +238,21 @@ def get_vix_zscore():
     z_inverted = -z
     z_smooth = z_inverted.ewm(span=5, adjust=False).mean()
 
-    return vix, round(z_smooth.iloc[-1], 2)
+    z_score = round(z_smooth.iloc[-1], 2)
+    result = {'vix': vix, 'z_score': z_score}
+    save_to_cache(cache_key, result)
+    return vix, z_score
 
 
 # GLI CALCULATION
 
 def calculate_gli():
     """Calculate Global Liquidity Index: Fed Balance Sheet - TGA - RRP."""
+    cache_key = "gli"
+    cached = load_from_cache(cache_key)
+    if cached:
+        return cached
+
     fed_data = get_fred_series("WALCL", limit=14)
     tga_data = get_fred_series("WTREGEN", limit=70)
     rrp_data = get_fred_series("RRPONTSYD", limit=70)
@@ -133,26 +267,26 @@ def calculate_gli():
         rrp_val = next((v for v, d in rrp_data if d <= fed_date), None)
         if tga_val and rrp_val:
             gli_series.append(((fed_val - tga_val - rrp_val) / 1000, fed_date))
-    
+
     if not gli_series:
         return None
-    
+
     current_gli, current_date = gli_series[0]
-    
+
     def calc_change(weeks):
         if len(gli_series) > weeks:
             prev = gli_series[weeks][0]
             change = current_gli - prev
             return round(change, 2), round((change / prev) * 100, 2)
         return None, None
-    
+
     wow_change, wow_pct = calc_change(1)
     mom_change, mom_pct = calc_change(4)
     qoq_change, qoq_pct = calc_change(12)
-    
+
     trend = "📈 Expanding" if mom_pct and mom_pct > 1 else "📉 Contracting" if mom_pct and mom_pct < -1 else "➡️ Flat"
-    
-    return {
+
+    result = {
         'value': round(current_gli, 2),
         'fed_bs': round(fed_data[0][0] / 1000, 2),
         'tga': round(tga_data[0][0] / 1000, 2),
@@ -163,6 +297,8 @@ def calculate_gli():
         'qoq_change': qoq_change, 'qoq_pct': qoq_pct,
         'trend': trend,
     }
+    save_to_cache(cache_key, result)
+    return result
 
 
 # TECHNICAL ANALYSIS
@@ -406,13 +542,13 @@ def calculate_zscore(close, window=ZSCORE_WINDOW):
     if len(close) < window:
         return None, None
 
-    mean = close.rolling(window).mean().iloc[-1]
-    std = close.rolling(window).std().iloc[-1]
+    mean = float(close.rolling(window).mean().iloc[-1])
+    std = float(close.rolling(window).std().iloc[-1])
 
     if std == 0 or np.isnan(std):
         return 0, "Neutral"
 
-    zscore = round((close.iloc[-1] - mean) / std, 2)
+    zscore = round((float(close.iloc[-1]) - mean) / std, 2)
 
     # Classify zone using threshold ranges
     zones = [
@@ -487,32 +623,35 @@ def detect_trend(df):
 
 def calculate_technicals(ticker):
     """Calculate technical indicators using weekly timeframe only."""
-    # Try 5y for MA200 weekly, fallback to 2y if insufficient
-    data = yf.download(ticker, period="5y", interval="1d", progress=False)
+    # Download weekly data directly (complete weeks only)
+    # Need ~260 weeks for MA200 weekly (5 years)
+    weekly_df = get_cached_ticker(ticker, period="5y", interval="1wk")
 
-    if data.empty or len(data) < 50:
+    if weekly_df.empty or len(weekly_df) < 50:
         # Fallback: try shorter period
-        data = yf.download(ticker, period="2y", interval="1d", progress=False)
+        weekly_df = get_cached_ticker(ticker, period="2y", interval="1wk")
 
-    if data.empty:
+    if weekly_df.empty:
         return None
 
-    if isinstance(data.columns, pd.MultiIndex):
-        data.columns = data.columns.get_level_values(0)
+    # Ensure we only use complete weekly candles (ending Sunday)
+    # If last bar is not Sunday (weekday 6), drop it (incomplete week)
+    last_bar_date = pd.Timestamp(weekly_df.index[-1])
+    if last_bar_date.weekday() != 6:  # Not Sunday
+        weekly_df = weekly_df[:-1]
+        if weekly_df.empty:
+            return None
 
-    # Get current price from daily close
-    price = data['Close'].iloc[-1]
-
-    # Resample to weekly
-    weekly_df = data.resample('W').agg({
-        'Open': 'first', 'High': 'max', 'Low': 'min', 'Close': 'last', 'Volume': 'sum'
-    }).dropna()
+    # Get price from last COMPLETE weekly candle close
+    price = weekly_df['Close'].iloc[-1]
+    weekly_date = pd.Timestamp(weekly_df.index[-1]).strftime('%Y-%m-%d')  # Store last complete week date
 
     weeks_available = len(weekly_df)
 
     if weeks_available < 26:
         return {
             'price': price,
+            'weekly_date': weekly_date,
             'weeks': weeks_available,
             'zscore': None,
             'zscore_zone': 'N/A',
@@ -548,6 +687,7 @@ def calculate_technicals(ticker):
 
     return {
         'price': price,
+        'weekly_date': weekly_date,
         'weeks': weeks_available,
         'zscore': zscore,
         'zscore_zone': zone,
@@ -568,18 +708,16 @@ def calculate_technicals(ticker):
 def calculate_daily_technicals(ticker):
     """Calculate daily (1d) technical indicators using TEMA crosses."""
     # Fetch 1 year of daily data
-    data = yf.download(ticker, period="1y", interval="1d", progress=False)
+    data = get_cached_ticker(ticker, period="1y", interval="1d")
 
     if data.empty or len(data) < 200:
         return None
-
-    if isinstance(data.columns, pd.MultiIndex):
-        data.columns = data.columns.get_level_values(0)
 
     close = data['Close']
     high = data['High']
     low = data['Low']
     price = close.iloc[-1]
+    daily_date = pd.Timestamp(data.index[-1]).strftime('%Y-%m-%d')  # Store last daily candle date
 
     # Daily Z-score (20-day window)
     zscore_daily, zone_daily = calculate_zscore(close, window=20)
@@ -649,6 +787,7 @@ def calculate_daily_technicals(ticker):
 
     return {
         'price': price,
+        'daily_date': daily_date,
         'zscore_daily': zscore_daily,
         'zscore_zone_daily': zone_daily,
         'tema20': round(tema20_curr, 2),
@@ -861,6 +1000,9 @@ def main():
 
     print(f"Fetching market data...")
     print(f"Date: {datetime.now().strftime('%A, %Y-%m-%d %H:%M')}")
+
+    # Cleanup old orphan caches
+    cleanup_orphan_caches(max_age_days=7)
     print(f"Portfolio: {assets_name}")
 
     # Collect macro data
@@ -913,9 +1055,40 @@ def main():
             print(f"  - {ticker} (weekly + daily)...")
             asset_data[name] = calculate_technicals(ticker)
             daily_data[name] = calculate_daily_technicals(ticker)
-        except Exception:
+        except Exception as e:
+            print(f"    ERROR: {e}")
             asset_data[name] = None
             daily_data[name] = None
+
+    # Extract dates from first available ticker data
+    weekly_candle_date = None
+    daily_candle_date = None
+    for name in ASSETS.keys():
+        if asset_data.get(name) and asset_data[name].get('weekly_date'):
+            weekly_candle_date = asset_data[name]['weekly_date']
+            break
+    for name in ASSETS.keys():
+        if daily_data.get(name) and daily_data[name].get('daily_date'):
+            daily_candle_date = daily_data[name]['daily_date']
+            break
+
+    # Add data timeframe info to macro section
+    if weekly_candle_date:
+        macro_data.insert(0, {
+            'Indicator': 'Weekly Data (Complete Week)',
+            'Value': weekly_candle_date,
+            'Unit': 'Date',
+            'Signal': 'Last Complete',
+            'Detail': 'All weekly indicators use this candle'
+        })
+    if daily_candle_date:
+        macro_data.insert(1 if weekly_candle_date else 0, {
+            'Indicator': 'Daily Data (Most Recent)',
+            'Value': daily_candle_date,
+            'Unit': 'Date',
+            'Signal': 'Latest Available',
+            'Detail': 'All daily indicators use this candle'
+        })
 
     # Prepare asset analysis data
     asset_rows = []

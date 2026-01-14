@@ -47,3 +47,4 @@ draft/
 output/
 tickers/
 assets.json
+.cache/
