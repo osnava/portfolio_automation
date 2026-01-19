@@ -229,7 +229,7 @@ def main():
     # Write XLSX file with multiple sheets
     print("\nWriting XLSX file...")
 
-    xlsx_file = OUTPUT_DIR / f"{timestamp}_ANALYSIS.xlsx"
+    xlsx_file = OUTPUT_DIR / f"{timestamp}_{assets_name}_ANALYSIS.xlsx"
 
     with pd.ExcelWriter(xlsx_file, engine='openpyxl') as writer:
         # Sheet 1: Macro indicators
