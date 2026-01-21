@@ -12,13 +12,7 @@ import pandas as pd
 from config import OUTPUT_DIR
 from data.loaders import load_assets
 from data.cache import cleanup_orphan_caches
-from data.fetchers import (
-    calculate_gli,
-    get_vix_zscore,
-    get_fear_greed_traditional,
-    get_fear_greed_crypto,
-    get_regime_from_vix_z
-)
+from data.fetchers import calculate_gli, get_vix, get_vix_level
 from analysis.weekly import calculate_technicals
 from analysis.daily import calculate_daily_technicals
 from reporting.excel import apply_conditional_formatting
@@ -64,27 +58,17 @@ def main():
     except Exception:
         macro_data.append({'Indicator': 'Global Liquidity', 'Value': None, 'Unit': None, 'Signal': 'Error', 'Detail': 'Error'})
 
-    # VIX
+    # VIX with ZTanh (sentiment: positive=greed, negative=fear)
     print("Fetching VIX data...")
     try:
-        vix, vix_z = get_vix_zscore()
+        vix, vix_ztanh, vix_sentiment = get_vix()
         if vix:
-            vix_levels = [(15, "Low"), (20, "Normal"), (30, "Elevated"), (float('inf'), "High")]
-            vix_desc = next(desc for threshold, desc in vix_levels if vix < threshold)
-            regime = get_regime_from_vix_z(vix_z)
-            macro_data.append({'Indicator': 'VIX', 'Value': round(vix, 2), 'Unit': 'Index', 'Signal': vix_desc, 'Detail': ''})
-            macro_data.append({'Indicator': '-Z(VIX)', 'Value': round(vix_z, 2), 'Unit': 'Z-Score', 'Signal': regime, 'Detail': ''})
+            vix_level = get_vix_level(vix)
+            macro_data.append({'Indicator': 'VIX', 'Value': round(vix, 2), 'Unit': 'Index', 'Signal': vix_level, 'Detail': ''})
+            if vix_ztanh is not None:
+                macro_data.append({'Indicator': 'VIX ZTanh', 'Value': round(vix_ztanh, 3), 'Unit': '[-1, +1]', 'Signal': vix_sentiment, 'Detail': ''})
     except Exception:
         macro_data.append({'Indicator': 'VIX', 'Value': None, 'Unit': None, 'Signal': 'Error', 'Detail': 'Error'})
-
-    # Fear & Greed
-    print("Fetching Fear & Greed indices...")
-    for fn, lbl in [(get_fear_greed_traditional, 'F&G Stocks'), (get_fear_greed_crypto, 'F&G Crypto')]:
-        try:
-            val, cls = fn()
-            macro_data.append({'Indicator': lbl, 'Value': int(val), 'Unit': '0-100 Scale', 'Signal': cls, 'Detail': ''})
-        except Exception:
-            macro_data.append({'Indicator': lbl, 'Value': None, 'Unit': None, 'Signal': 'Error', 'Detail': 'Error'})
 
     # Fetch all asset data (weekly and daily)
     print(f"Fetching data for {len(ASSETS)} assets...")
@@ -143,7 +127,8 @@ def main():
                 'Name': name,
                 'Ticker': ticker,
                 'Price': round(tech['price'], 4),
-                'Z-Score': round(tech['zscore'], 2) if tech['zscore'] is not None else None,
+                'ZTanh': round(tech['ztanh'], 3) if tech['ztanh'] is not None else None,
+                'ZTanh_Zone': tech['ztanh_zone'],
                 'TSMOM_%': round(tech['tsmom_score'], 2) if tech['tsmom_score'] is not None else None,
                 'MA_Score': tech['ma_score'] if tech['ma_score'] is not None else None,
                 'MA_Max': tech['ma_max'] if tech['ma_max'] is not None else None,
@@ -173,7 +158,8 @@ def main():
                 'Name': name,
                 'Ticker': ticker,
                 'Price': None,
-                'Z-Score': None,
+                'ZTanh': None,
+                'ZTanh_Zone': 'Error',
                 'TSMOM_%': None,
                 'MA_Score': None,
                 'MA_Max': None,
@@ -185,45 +171,32 @@ def main():
         # Daily technicals row - use numeric types for Excel
         daily_tech = daily_data.get(name)
         if daily_tech:
-            # Consolidate TEMA distances into one readable string
-            tema_dist = f"20:{daily_tech['tema20_dist']:+.1f}% | 50:{daily_tech['tema50_dist']:+.1f}% | 200:{daily_tech['tema200_dist']:+.1f}%"
-
-            # Consolidate crosses into one column
-            crosses = []
-            if daily_tech['cross_20_50'] != 'None':
-                crosses.append(f"20x50:{daily_tech['cross_20_50'].replace(' Cross', '')}")
-            if daily_tech['cross_50_200'] != 'None':
-                crosses.append(f"50x200:{daily_tech['cross_50_200'].replace(' Cross', '')}")
-            crosses_str = " | ".join(crosses) if crosses else "None"
-
             daily_rows.append({
                 'Name': name,
                 'Ticker': ticker,
                 'Price': round(daily_tech['price'], 4),
-                'Z-Score': round(daily_tech['zscore_daily'], 2) if daily_tech['zscore_daily'] is not None else None,
-                'TEMA_Dist': tema_dist,
-                'Crosses': crosses_str,
+                'ZTanh': round(daily_tech['ztanh_daily'], 3) if daily_tech['ztanh_daily'] is not None else None,
+                'ZTanh_Zone': daily_tech['ztanh_zone_daily'],
+                'MA_Score': daily_tech['ma_score'],
+                'MA_Dist': daily_tech['ma_distance'],
                 'ADX': round(daily_tech['adx_daily'], 1),
-                'Consensus': round(daily_tech['tema_consensus'], 2),
-                'Confidence': round(daily_tech['tema_confidence'], 2),
-                'Ensemble': daily_tech['tema_ensemble'],
-                'Trend': daily_tech['trend_ensemble'],
-                'Vol_Scalar': round(daily_tech['vol_scalar'], 2),
+                'ADX_Action': daily_tech['adx_action'],
+                'DI_Bias': daily_tech['di_bias'],
+                'Trend': daily_tech['trend_daily'],
             })
         else:
             daily_rows.append({
                 'Name': name,
                 'Ticker': ticker,
                 'Price': None,
-                'Z-Score': None,
-                'TEMA_Dist': 'Error',
-                'Crosses': 'Error',
+                'ZTanh': None,
+                'ZTanh_Zone': 'Error',
+                'MA_Score': None,
+                'MA_Dist': 'Error',
                 'ADX': None,
-                'Consensus': None,
-                'Confidence': None,
-                'Ensemble': 'Error',
+                'ADX_Action': 'Error',
+                'DI_Bias': 'Error',
                 'Trend': 'Error',
-                'Vol_Scalar': None,
             })
 
     # Write XLSX file with multiple sheets

@@ -2,7 +2,7 @@
 
 import pandas as pd
 from data.cache import get_cached_ticker
-from indicators.zscore import calculate_zscore
+from indicators.ztanh import calculate_ztanh, get_ztanh_zone
 from indicators.momentum import calculate_tsmom, calculate_ma_score, format_ma_distance
 from indicators.trend import detect_trend
 from analysis.regime import classify_regime
@@ -41,8 +41,8 @@ def calculate_technicals(ticker):
             'price': price,
             'weekly_date': weekly_date,
             'weeks': weeks_available,
-            'zscore': None,
-            'zscore_zone': 'N/A',
+            'ztanh': None,
+            'ztanh_zone': 'N/A',
             'ma_distance': 'N/A',
             'trend': 'Insufficient Data',
             'trend_strength': 'N/A',
@@ -56,13 +56,14 @@ def calculate_technicals(ticker):
             'regime_bias': 'Insufficient data'
         }
 
-    # Calculate indicators on weekly data
+    # Calculate indicators on weekly data (using ticker-specific weights)
     close_weekly = weekly_df['Close']
-    zscore, zone = calculate_zscore(close_weekly)
+    ztanh = calculate_ztanh(close_weekly, ticker=ticker)
+    ztanh_zone = get_ztanh_zone(ztanh, ticker=ticker, timeframe='weekly')
     ma_distance = format_ma_distance(close_weekly, price, MA_PERIODS)
 
     if len(weekly_df) >= 50:
-        trend, trend_strength, adx = detect_trend(weekly_df)
+        trend, trend_strength, adx = detect_trend(weekly_df, timeframe='weekly')
     else:
         trend, trend_strength, adx = "Insufficient Data", "N/A", None
 
@@ -70,15 +71,15 @@ def calculate_technicals(ticker):
     tsmom_score, tsmom_details = calculate_tsmom(close_weekly)
     ma_score, ma_max, ma_details = calculate_ma_score(close_weekly, price)
 
-    # Regime classification
-    regime, regime_bias = classify_regime(adx, tsmom_score, zscore, ma_score, ma_max)
+    # Regime classification (uses ticker-specific ztanh thresholds)
+    regime, regime_bias = classify_regime(adx, tsmom_score, ztanh, ma_score, ma_max, ticker=ticker)
 
     return {
         'price': price,
         'weekly_date': weekly_date,
         'weeks': weeks_available,
-        'zscore': zscore,
-        'zscore_zone': zone,
+        'ztanh': ztanh,
+        'ztanh_zone': ztanh_zone,
         'ma_distance': ma_distance,
         'trend': trend,
         'trend_strength': trend_strength,

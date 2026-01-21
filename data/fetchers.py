@@ -1,8 +1,10 @@
 """API data fetchers for market indicators."""
 
 import requests
+import pandas as pd
 from data.cache import load_from_cache, save_to_cache, get_cached_ticker
-from config import FRED_API_KEY, VIX_ZSCORE_WINDOW, VIX_ZSCORE_EMA_SPAN
+from indicators.ztanh import calculate_ztanh, get_vix_sentiment
+from config import FRED_API_KEY
 
 
 def get_fred_series(series_id, limit=1):
@@ -27,69 +29,51 @@ def get_fred_series(series_id, limit=1):
     return [(float(o['value']), o['date']) for o in observations if o['value'] != '.']
 
 
-def get_fear_greed_traditional():
-    """Fetch CNN Fear & Greed Index using fear-and-greed package."""
-    cache_key = "fear_greed_stocks"
-    cached = load_from_cache(cache_key)
-    if cached:
-        return cached['value'], cached['description']
+def get_vix():
+    """Fetch current VIX value and calculate ZTanh. Always fetches fresh data."""
+    import yfinance as yf
 
+    # Always fetch fresh VIX data (no caching - VIX is critical and yfinance is fast)
     try:
-        import fear_and_greed
-    except ImportError:
-        raise ImportError(
-            "fear-and-greed package not installed.\n"
-            "Install with: pip install fear-and-greed"
-        )
+        hist = yf.download("^VIX", period="1y", interval="1d", auto_adjust=True, progress=False)
+        if isinstance(hist.columns, pd.MultiIndex):
+            hist.columns = hist.columns.get_level_values(0)
+    except Exception:
+        hist = pd.DataFrame()
 
-    data = fear_and_greed.get()
-    result = {'value': round(data.value), 'description': data.description.title()}
-    save_to_cache(cache_key, result)
-    return result['value'], result['description']
+    if hist.empty or len(hist) < 210:
+        return None, None, None
 
+    vix = round(hist['Close'].iloc[-1], 2)
 
-def get_fear_greed_crypto():
-    """Fetch Crypto Fear & Greed Index."""
-    cache_key = "fear_greed_crypto"
-    cached = load_from_cache(cache_key)
-    if cached:
-        return cached['value'], cached['classification']
+    # Calculate ZTanh for VIX using VIX-specific weights and convert to sentiment label
+    ztanh = calculate_ztanh(hist['Close'], ticker='^VIX')
+    sentiment = get_vix_sentiment(ztanh)
 
-    r = requests.get("https://api.alternative.me/fng/?limit=1", timeout=10)
-    r.raise_for_status()
-    data = r.json()['data'][0]
-    result = {'value': int(data['value']), 'classification': data['value_classification'].title()}
-    save_to_cache(cache_key, result)
-    return result['value'], result['classification']
+    return vix, ztanh, sentiment
 
 
-def get_vix_zscore():
-    """Fetch VIX and calculate smoothed inverted Z-score (252-day rolling window, 5-period EMA)."""
-    cache_key = "vix_zscore"
-    cached = load_from_cache(cache_key)
-    if cached:
-        return cached['vix'], cached['z_score']
+def get_vix_level(vix):
+    """
+    Classify VIX into a regime level.
 
-    hist = get_cached_ticker("^VIX", period="2y", interval="1d")
-    if hist.empty or len(hist) < VIX_ZSCORE_WINDOW:
-        return None, None
+    Args:
+        vix: VIX value
 
-    vix_series = hist['Close']
-    vix = round(vix_series.iloc[-1], 2)
+    Returns:
+        str: VIX level description
+    """
+    if vix is None:
+        return "N/A"
 
-    # Z-score with 252-day window (1 year of trading days)
-    mean = vix_series.rolling(VIX_ZSCORE_WINDOW).mean()
-    std = vix_series.rolling(VIX_ZSCORE_WINDOW).std()
-    z = (vix_series - mean) / std
-
-    # Invert and smooth with 5-period EMA
-    z_inverted = -z
-    z_smooth = z_inverted.ewm(span=VIX_ZSCORE_EMA_SPAN, adjust=False).mean()
-
-    z_score = round(z_smooth.iloc[-1], 2)
-    result = {'vix': vix, 'z_score': z_score}
-    save_to_cache(cache_key, result)
-    return vix, z_score
+    if vix < 15:
+        return "Low"
+    elif vix < 20:
+        return "Normal"
+    elif vix < 30:
+        return "Elevated"
+    else:
+        return "High"
 
 
 def calculate_gli():
@@ -130,7 +114,7 @@ def calculate_gli():
     mom_change, mom_pct = calc_change(4)
     qoq_change, qoq_pct = calc_change(12)
 
-    trend = "📈 Expanding" if mom_pct and mom_pct > 1 else "📉 Contracting" if mom_pct and mom_pct < -1 else "➡️ Flat"
+    trend = "Expanding" if mom_pct and mom_pct > 1 else "Contracting" if mom_pct and mom_pct < -1 else "Flat"
 
     result = {
         'value': round(current_gli, 2),
@@ -145,16 +129,3 @@ def calculate_gli():
     }
     save_to_cache(cache_key, result)
     return result
-
-
-def get_regime_from_vix_z(vix_z):
-    """Map VIX Z-score to market regime."""
-    if vix_z >= 1.5:
-        return "Complacency"
-    elif vix_z <= -1.5:
-        return "Fear"
-    elif vix_z >= 0.5:
-        return "Risk-On"
-    elif vix_z <= -0.5:
-        return "Risk-Off"
-    return "Neutral"

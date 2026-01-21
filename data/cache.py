@@ -47,10 +47,16 @@ def cleanup_orphan_caches(max_age_days=CACHE_MAX_AGE_DAYS):
             cache_file.unlink()
 
 
-def get_cached_ticker(ticker, period, interval):
+def get_cached_ticker(ticker, period, interval, fresh=False):
     """
     Smart persistent cache for yfinance data.
     Returns cached data if last bar is recent, otherwise fetches fresh data.
+
+    Args:
+        ticker: Stock ticker symbol
+        period: Data period (e.g., '1y', '5y')
+        interval: Data interval (e.g., '1d', '1wk')
+        fresh: If True, skip cache and always fetch fresh data
 
     Best practices:
     - Uses auto_adjust=True for split/dividend adjusted prices
@@ -59,8 +65,8 @@ def get_cached_ticker(ticker, period, interval):
     """
     cache_file = CACHE_DIR / f"{ticker}_{interval}_historical.pkl"
 
-    # Load existing cache
-    if cache_file.exists():
+    # Skip cache for fresh requests (important for daily data during market hours)
+    if not fresh and cache_file.exists():
         try:
             cached_data = pd.read_pickle(cache_file)
             if not cached_data.empty and len(cached_data) > 0:

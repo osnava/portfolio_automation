@@ -4,5 +4,4 @@ numpy
 ta
 requests
 python-dotenv
-fear-and-greed
 openpyxl

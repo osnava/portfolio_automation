@@ -1,35 +1,65 @@
 """Market regime classification for strategy selection."""
 
+from config import ADX_NO_TREND, ADX_TREND_EMERGING
+from indicators.ztanh import get_ticker_thresholds
 
-def classify_regime(adx, tsmom_score, zscore, ma_score, ma_max):
+
+def classify_regime(adx, tsmom_score, ztanh, ma_score, ma_max, ticker='default'):
     """
-    Classify market regime for strategy selection.
-    Returns: regime name, action bias
+    Classify market regime. Returns (regime, mode).
 
-    tsmom_score is the average % return across lookback periods
+    ADX Levels:
+        > 25: Strong trend → trend-following mode
+        20-25: Emerging trend → cautious trend-following
+        < 20: No trend → mean-reversion mode
+
+    TSMOM Levels:
+        > +2%: Positive momentum
+        < -2%: Negative momentum
+        [-2%, +2%]: Neutral momentum
+
+    Args:
+        adx: ADX indicator value
+        tsmom_score: Time-series momentum score (%)
+        ztanh: ZTanh indicator value [-1, +1]
+        ma_score: Moving average alignment score
+        ma_max: Maximum possible MA score
+        ticker: Ticker symbol for threshold lookup
+
+    Returns:
+        tuple: (regime_name, mode_description)
     """
     if adx is None or tsmom_score is None:
         return "UNKNOWN", "Insufficient data"
 
+    # Get ticker-specific thresholds for weekly timeframe
+    thresholds = get_ticker_thresholds(ticker, timeframe='weekly')
     ma_pct = (ma_score / ma_max) if ma_max > 0 else 0
 
-    # Strong uptrend: high ADX + positive momentum + good MA alignment
-    if adx > 25 and tsmom_score > 2 and ma_pct >= 0.6:
-        return "TRENDING_UP", "Ride trend, buy dips"
+    # === STRONG TREND: ADX > 25 ===
+    if adx > ADX_TREND_EMERGING:
+        # Bullish: positive momentum + MA alignment
+        if tsmom_score > 2 and ma_pct >= 0.6:
+            return "TRENDING_UP", "Trend-following: long"
+        # Bearish: negative momentum (MA alignment not required for exits)
+        if tsmom_score < -2:
+            return "TRENDING_DOWN", "Trend-following: exit"
+        # ADX > 25 but mixed signals (momentum neutral or MA weak)
+        return "TREND_UNCLEAR", "Trend present, signals mixed"
 
-    # Strong downtrend: high ADX + negative momentum
-    if adx > 25 and tsmom_score < -2:
-        return "TRENDING_DOWN", "Avoid or exit"
+    # === EMERGING TREND: ADX 20-25 ===
+    if adx >= ADX_NO_TREND:
+        if tsmom_score > 2:
+            return "TREND_EMERGING_UP", "Emerging trend: cautious long"
+        if tsmom_score < -2:
+            return "TREND_EMERGING_DOWN", "Emerging trend: cautious exit"
+        return "NEUTRAL", "No clear edge"
 
-    # Mean-reversion opportunity: weak trend + extreme Z
-    if adx < 25 and zscore is not None and abs(zscore) > 1.5:
-        if zscore < -1.5:
-            return "MEAN_REVERT_BUY", "Z-score oversold"
-        else:
-            return "MEAN_REVERT_SELL", "Z-score overbought"
+    # === NO TREND: ADX < 20 → mean-reversion mode ===
+    if ztanh is not None:
+        if ztanh <= thresholds['oversold']:
+            return "MEAN_REVERT_BUY", "Mean-reversion: long"
+        if ztanh >= thresholds['overbought']:
+            return "MEAN_REVERT_SELL", "Mean-reversion: short"
 
-    # Choppy/unclear
-    if adx < 20:
-        return "CHOPPY", "Reduce exposure, wait"
-
-    return "NEUTRAL", "No strong edge"
+    return "CHOPPY", "No-trade mode"

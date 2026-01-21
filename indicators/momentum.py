@@ -1,5 +1,6 @@
 """Momentum indicators (TSMOM, MA Score)."""
 
+from ta.trend import SMAIndicator
 from config import TSMOM_LOOKBACKS, MA_PERIODS
 
 
@@ -31,10 +32,10 @@ def calculate_ma_score(close, price):
     if len(close) < 50:
         return None, None, []
 
-    ma20 = close.rolling(20).mean().iloc[-1]
-    ma50 = close.rolling(50).mean().iloc[-1]
-    ma100 = close.rolling(100).mean().iloc[-1] if len(close) >= 100 else None
-    ma200 = close.rolling(200).mean().iloc[-1] if len(close) >= 200 else None
+    ma20 = SMAIndicator(close, window=20).sma_indicator().iloc[-1]
+    ma50 = SMAIndicator(close, window=50).sma_indicator().iloc[-1]
+    ma100 = SMAIndicator(close, window=100).sma_indicator().iloc[-1] if len(close) >= 100 else None
+    ma200 = SMAIndicator(close, window=200).sma_indicator().iloc[-1] if len(close) >= 200 else None
 
     checks = [
         (price > ma20, "Price>MA20"),
@@ -66,7 +67,7 @@ def format_ma_distance(close, price, periods=MA_PERIODS):
     parts = []
     for p in periods:
         if len(close) >= p:
-            ma = close.rolling(p).mean().iloc[-1]
+            ma = SMAIndicator(close, window=p).sma_indicator().iloc[-1]
             pct = ((price - ma) / ma) * 100
             parts.append(f"MA{p}: {abs(pct):.1f}%{'↑' if pct > 0 else '↓'}")
     return " | ".join(parts) if parts else "N/A"
