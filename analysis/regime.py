@@ -30,7 +30,7 @@ def classify_regime(adx, tsmom_score, ztanh, ma_score, ma_max, ticker='default')
         tuple: (regime_name, mode_description)
     """
     if adx is None or tsmom_score is None:
-        return "UNKNOWN", "Insufficient data"
+        return "Unknown", "Insufficient data"
 
     # Get ticker-specific thresholds for weekly timeframe
     thresholds = get_ticker_thresholds(ticker, timeframe='weekly')
@@ -40,26 +40,26 @@ def classify_regime(adx, tsmom_score, ztanh, ma_score, ma_max, ticker='default')
     if adx > ADX_TREND_EMERGING:
         # Bullish: positive momentum + MA alignment
         if tsmom_score > 2 and ma_pct >= 0.6:
-            return "TRENDING_UP", "Trend-following: long"
+            return "Trending Up", "Trend-following: long"
         # Bearish: negative momentum (MA alignment not required for exits)
         if tsmom_score < -2:
-            return "TRENDING_DOWN", "Trend-following: exit"
+            return "Trending Down", "Trend-following: exit"
         # ADX > 25 but mixed signals (momentum neutral or MA weak)
-        return "TREND_UNCLEAR", "Trend present, signals mixed"
+        return "Trend Unclear", "Trend present, signals mixed"
 
     # === EMERGING TREND: ADX 20-25 ===
     if adx >= ADX_NO_TREND:
         if tsmom_score > 2:
-            return "TREND_EMERGING_UP", "Emerging trend: cautious long"
+            return "Emerging Up", "Emerging trend: cautious long"
         if tsmom_score < -2:
-            return "TREND_EMERGING_DOWN", "Emerging trend: cautious exit"
-        return "NEUTRAL", "No clear edge"
+            return "Emerging Down", "Emerging trend: cautious exit"
+        return "Neutral", "No clear edge"
 
     # === NO TREND: ADX < 20 → mean-reversion mode ===
     if ztanh is not None:
         if ztanh <= thresholds['oversold']:
-            return "MEAN_REVERT_BUY", "Mean-reversion: long"
+            return "Mean Revert Buy", "Mean-reversion: long"
         if ztanh >= thresholds['overbought']:
-            return "MEAN_REVERT_SELL", "Mean-reversion: short"
+            return "Mean Revert Sell", "Mean-reversion: short"
 
-    return "CHOPPY", "No-trade mode"
+    return "Choppy", "No-trade mode"

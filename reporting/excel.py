@@ -85,9 +85,12 @@ def apply_conditional_formatting(xlsx_path, num_rows):
         optimize_column_widths(ws)
 
     # === DAILY SHEET ===
-    # Columns: Name, Ticker, Price, ZTanh, ZTanh_Zone, MA_Score, MA_Dist, ADX, ADX_Action, DI_Bias, Trend
+    # Columns: Name, Ticker, Price, ZTanh, ZTanh_Zone, ADX, ADX_Action, DI_Bias, KAMA, KAMA_Dist%, Price_vs_KAMA
     if 'Daily' in wb.sheetnames:
         ws = wb['Daily']
+
+        green_fill = PatternFill(start_color='C6EFCE', end_color='C6EFCE', fill_type='solid')
+        red_fill = PatternFill(start_color='FFC7CE', end_color='FFC7CE', fill_type='solid')
 
         # ZTanh (col D): -1 (red) → 0 (white) → +1 (yellow)
         ws.conditional_formatting.add(f'D2:D{num_rows+1}',
@@ -95,34 +98,32 @@ def apply_conditional_formatting(xlsx_path, num_rows):
                           mid_type='num', mid_value=0, mid_color='FFFFFF',
                           end_type='num', end_value=1, end_color='FFEB84'))
 
-        # MA_Score (col F): 0 (white) → 7 (green)
+        # ADX (col F): 10 (white) → 50 (green)
         ws.conditional_formatting.add(f'F2:F{num_rows+1}',
-            ColorScaleRule(start_type='num', start_value=0, start_color='FFFFFF',
-                          end_type='num', end_value=7, end_color='63BE7B'))
-
-        # ADX (col H): 10 (white) → 50 (green)
-        ws.conditional_formatting.add(f'H2:H{num_rows+1}',
             ColorScaleRule(start_type='num', start_value=10, start_color='FFFFFF',
                           end_type='num', end_value=50, end_color='63BE7B'))
 
-        # DI_Bias (col J): Highlight Bullish in green, Bearish in red
-        green_fill = PatternFill(start_color='C6EFCE', end_color='C6EFCE', fill_type='solid')
-        red_fill = PatternFill(start_color='FFC7CE', end_color='FFC7CE', fill_type='solid')
-
-        ws.conditional_formatting.add(f'J2:J{num_rows+1}',
-            Rule(type='containsText', operator='containsText', formula=['SEARCH("Bullish",J2)'],
+        # DI_Bias (col H): Highlight Bullish in green, Bearish in red
+        ws.conditional_formatting.add(f'H2:H{num_rows+1}',
+            Rule(type='containsText', operator='containsText', formula=['SEARCH("Bullish",H2)'],
                  dxf=DifferentialStyle(fill=green_fill), text='Bullish'))
-        ws.conditional_formatting.add(f'J2:J{num_rows+1}',
-            Rule(type='containsText', operator='containsText', formula=['SEARCH("Bearish",J2)'],
+        ws.conditional_formatting.add(f'H2:H{num_rows+1}',
+            Rule(type='containsText', operator='containsText', formula=['SEARCH("Bearish",H2)'],
                  dxf=DifferentialStyle(fill=red_fill), text='Bearish'))
 
-        # Trend (col K): Highlight based on trend direction
+        # KAMA_Dist% (col J): -10 (red) → 0 (white) → +10 (green)
+        ws.conditional_formatting.add(f'J2:J{num_rows+1}',
+            ColorScaleRule(start_type='num', start_value=-10, start_color='F8696B',
+                          mid_type='num', mid_value=0, mid_color='FFFFFF',
+                          end_type='num', end_value=10, end_color='63BE7B'))
+
+        # Price_vs_KAMA (col K): Highlight Above in green, Below in red
         ws.conditional_formatting.add(f'K2:K{num_rows+1}',
-            Rule(type='containsText', operator='containsText', formula=['SEARCH("Bullish",K2)'],
-                 dxf=DifferentialStyle(fill=green_fill), text='Bullish'))
+            Rule(type='containsText', operator='containsText', formula=['SEARCH("Above",K2)'],
+                 dxf=DifferentialStyle(fill=green_fill), text='Above'))
         ws.conditional_formatting.add(f'K2:K{num_rows+1}',
-            Rule(type='containsText', operator='containsText', formula=['SEARCH("Bearish",K2)'],
-                 dxf=DifferentialStyle(fill=red_fill), text='Bearish'))
+            Rule(type='containsText', operator='containsText', formula=['SEARCH("Below",K2)'],
+                 dxf=DifferentialStyle(fill=red_fill), text='Below'))
 
         # Apply borders and optimize column widths
         apply_borders(ws)

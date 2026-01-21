@@ -27,7 +27,7 @@ A systematic approach to multi-asset analysis combining macro liquidity metrics,
   - **ZTanh** - Learned z-score transformation with tanh activation, bounded [-1, +1]
   - Time-Series Momentum (TSMOM) - Average percentage return across 4w/12w/26w lookbacks
   - MA Score - 7-point moving average alignment indicator (20/50/100/200-period)
-  - Regime Classification - TRENDING_UP, TRENDING_DOWN, TREND_EMERGING_UP/DOWN, TREND_UNCLEAR, MEAN_REVERT_BUY/SELL, CHOPPY, NEUTRAL
+  - Regime Classification - Trending Up, Trending Down, Emerging Up/Down, Trend Unclear, Mean Revert Buy/Sell, Choppy, Neutral
   - Directional Movement Index (ADX) for trend strength quantification
   - Moving average distance metrics for trend confirmation
 
@@ -280,8 +280,8 @@ Analysis complete. File saved to: output
 ### Sheet 2: Weekly
 | Name | Ticker | Price | ZTanh | ZTanh_Zone | TSMOM_% | MA_Score | MA_Max | ADX | Regime | Regime_Bias |
 |------|--------|-------|-------|------------|---------|----------|--------|-----|--------|-------------|
-| SMH | SMH | 389.22 | +0.72 | Upper | +18.43 | 7 | 7 | 30 | TRENDING_UP | Trend-following: long |
-| BTC-USD | BTC-USD | 90427 | -0.35 | Lower | +5.50 | 5 | 7 | 26 | TREND_UNCLEAR | Trend present, signals mixed |
+| SMH | SMH | 389.22 | +0.72 | Upper | +18.43 | 7 | 7 | 30 | Trending Up | Trend-following: long |
+| BTC-USD | BTC-USD | 90427 | -0.35 | Lower | +5.50 | 5 | 7 | 26 | Trend Unclear | Trend present, signals mixed |
 
 ### Sheet 3: Momentum
 | Name | Ticker | 4w_Return_% | 12w_Return_% | 26w_Return_% | MA_Distance |
@@ -372,7 +372,7 @@ Quantifies net dollar liquidity circulating in financial markets via Federal Res
 
 ## Signal Interpretation Guide
 
-- **Regime Classification**: TRENDING_UP | TRENDING_DOWN | TREND_EMERGING_UP/DOWN | TREND_UNCLEAR | MEAN_REVERT_BUY/SELL | CHOPPY | NEUTRAL
+- **Regime Classification**: Trending Up | Trending Down | Emerging Up/Down | Trend Unclear | Mean Revert Buy/Sell | Choppy | Neutral
 - **TSMOM_% (Momentum)**: >+15% Strong positive | +5% to +15% Moderate | +2% to +5% Weak | -2% to +2% Neutral | <-5% Negative
 - **MA Score (Alignment)**: 7/7 Strong uptrend | 5-6/7 Uptrend | 3-4/7 Mixed | 0-2/7 Downtrend
 - **ADX (Trend Strength)**: <20 No trend | 20-25 Emerging | 25-40 Trending | >40 Strong

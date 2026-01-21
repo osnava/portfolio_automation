@@ -47,3 +47,13 @@ TSMOM_LOOKBACKS = [4, 12, 26]  # weeks
 
 # ZTanh Settings
 ZTANH_PERIODS = [20, 50, 100, 200]
+
+# KAMA Settings (Kaufman's Adaptive Moving Average)
+# Used as trend filter on daily timeframe
+# window: Efficiency Ratio period
+# pow1: Fast EMA constant (fastest smoothing)
+# pow2: Slow EMA constant (slowest smoothing)
+KAMA_WINDOW = 10  # ER period
+KAMA_FAST = 2     # Fast EMA
+KAMA_SLOW_DAILY = 30  # Slow EMA for daily
+KAMA_SLOW_WEEKLY = 12  # Slow EMA for weekly (if needed later)

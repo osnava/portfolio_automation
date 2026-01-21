@@ -97,6 +97,22 @@ VIX sentiment using negated weights. Positive = Greed, Negative = Fear.
 
 ---
 
+### KAMA (Kaufman's Adaptive Moving Average)
+Adaptive MA that adjusts to market noise. Used as trend filter on daily.
+
+**Parameters:** window=10, fast=2, slow=30
+
+| Price_vs_KAMA | Condition | Action |
+|---------------|-----------|--------|
+| Extended Above | > KAMA + 2% | Wait for pullback |
+| Above | > KAMA | Trend intact, ok to enter |
+| Below | < KAMA | Trend weak, caution |
+| Extended Below | < KAMA - 2% | Oversold bounce possible |
+
+**Key Rule:** ZTanh Oversold + Price > KAMA = BUY. ZTanh Oversold + Price < KAMA = WAIT.
+
+---
+
 ### GLI (Global Liquidity Index)
 Net Fed liquidity: `GLI = Fed BS - TGA - RRP`
 
@@ -118,15 +134,15 @@ Net Fed liquidity: `GLI = Fed BS - TGA - RRP`
 
 | Regime | Conditions | Mode |
 |--------|------------|------|
-| TRENDING_UP | ADX >25 + TSMOM >2% + MA ≥60% | Trend-follow: long |
-| TRENDING_DOWN | ADX >25 + TSMOM <-2% | Trend-follow: exit |
-| TREND_UNCLEAR | ADX >25 + mixed signals | Trend present, mixed |
-| TREND_EMERGING_UP | ADX 20-25 + TSMOM >2% | Cautious long |
-| TREND_EMERGING_DOWN | ADX 20-25 + TSMOM <-2% | Cautious exit |
-| MEAN_REVERT_BUY | ADX <20 + ZTanh ≤ oversold | Mean-reversion: long |
-| MEAN_REVERT_SELL | ADX <20 + ZTanh ≥ overbought | Mean-reversion: short |
-| CHOPPY | ADX <20 + no extreme ZTanh | No-trade mode |
-| NEUTRAL | ADX 20-25 + TSMOM neutral | No clear edge |
+| Trending Up | ADX >25 + TSMOM >2% + MA ≥60% | Trend-follow: long |
+| Trending Down | ADX >25 + TSMOM <-2% | Trend-follow: exit |
+| Trend Unclear | ADX >25 + mixed signals | Trend present, mixed |
+| Emerging Up | ADX 20-25 + TSMOM >2% | Cautious long |
+| Emerging Down | ADX 20-25 + TSMOM <-2% | Cautious exit |
+| Mean Revert Buy | ADX <20 + ZTanh ≤ oversold | Mean-reversion: long |
+| Mean Revert Sell | ADX <20 + ZTanh ≥ overbought | Mean-reversion: short |
+| Choppy | ADX <20 + no extreme ZTanh | No-trade mode |
+| Neutral | ADX 20-25 + TSMOM neutral | No clear edge |
 
 ---
 

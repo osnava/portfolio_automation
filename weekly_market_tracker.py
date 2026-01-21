@@ -177,12 +177,12 @@ def main():
                 'Price': round(daily_tech['price'], 4),
                 'ZTanh': round(daily_tech['ztanh_daily'], 3) if daily_tech['ztanh_daily'] is not None else None,
                 'ZTanh_Zone': daily_tech['ztanh_zone_daily'],
-                'MA_Score': daily_tech['ma_score'],
-                'MA_Dist': daily_tech['ma_distance'],
-                'ADX': round(daily_tech['adx_daily'], 1),
+                'ADX': daily_tech['adx_daily'],
                 'ADX_Action': daily_tech['adx_action'],
                 'DI_Bias': daily_tech['di_bias'],
-                'Trend': daily_tech['trend_daily'],
+                'KAMA': daily_tech['kama'],
+                'KAMA_Dist%': daily_tech['kama_dist'],
+                'Price_vs_KAMA': daily_tech['price_vs_kama'],
             })
         else:
             daily_rows.append({
@@ -191,12 +191,12 @@ def main():
                 'Price': None,
                 'ZTanh': None,
                 'ZTanh_Zone': 'Error',
-                'MA_Score': None,
-                'MA_Dist': 'Error',
                 'ADX': None,
                 'ADX_Action': 'Error',
                 'DI_Bias': 'Error',
-                'Trend': 'Error',
+                'KAMA': None,
+                'KAMA_Dist%': None,
+                'Price_vs_KAMA': 'Error',
             })
 
     # Write XLSX file with multiple sheets

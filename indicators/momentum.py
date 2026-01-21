@@ -1,13 +1,15 @@
 """Momentum indicators (TSMOM, MA Score)."""
 
 from ta.trend import SMAIndicator
+from ta.momentum import ROCIndicator
 from config import TSMOM_LOOKBACKS, MA_PERIODS
 
 
 def calculate_tsmom(close, lookbacks=TSMOM_LOOKBACKS):
     """
-    Time-series momentum: average return across lookback periods
-    Returns the mean percentage return across all lookback windows
+    Time-series momentum: average return across lookback periods.
+    Uses ROCIndicator (Rate of Change) from ta library.
+    Returns the mean percentage return across all lookback windows.
     """
     if len(close) < max(lookbacks):
         return None, []
@@ -15,9 +17,9 @@ def calculate_tsmom(close, lookbacks=TSMOM_LOOKBACKS):
     returns = []
     details = []
     for lb in lookbacks:
-        ret = (close.iloc[-1] / close.iloc[-lb] - 1) * 100
-        returns.append(ret)
-        details.append(f"{lb}w: {ret:+.1f}%")
+        roc = ROCIndicator(close, window=lb).roc().iloc[-1]
+        returns.append(roc)
+        details.append(f"{lb}w: {roc:+.1f}%")
 
     composite = sum(returns) / len(returns)
     return round(composite, 2), details
