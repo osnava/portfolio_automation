@@ -4,7 +4,7 @@ from config import ADX_NO_TREND, ADX_TREND_EMERGING
 from indicators.ztanh import get_ticker_thresholds
 
 
-def classify_regime(adx, tsmom_score, ztanh, ma_score, ma_max, ticker='default'):
+def classify_regime(adx, tsmom_score, ztanh, ticker='default'):
     """
     Classify market regime. Returns (regime, mode).
 
@@ -22,8 +22,6 @@ def classify_regime(adx, tsmom_score, ztanh, ma_score, ma_max, ticker='default')
         adx: ADX indicator value
         tsmom_score: Time-series momentum score (%)
         ztanh: ZTanh indicator value [-1, +1]
-        ma_score: Moving average alignment score
-        ma_max: Maximum possible MA score
         ticker: Ticker symbol for threshold lookup
 
     Returns:
@@ -34,17 +32,16 @@ def classify_regime(adx, tsmom_score, ztanh, ma_score, ma_max, ticker='default')
 
     # Get ticker-specific thresholds for weekly timeframe
     thresholds = get_ticker_thresholds(ticker, timeframe='weekly')
-    ma_pct = (ma_score / ma_max) if ma_max > 0 else 0
 
     # === STRONG TREND: ADX > 25 ===
     if adx > ADX_TREND_EMERGING:
-        # Bullish: positive momentum + MA alignment
-        if tsmom_score > 2 and ma_pct >= 0.6:
+        # Bullish: positive momentum
+        if tsmom_score > 2:
             return "Trending Up", "Trend-following: long"
-        # Bearish: negative momentum (MA alignment not required for exits)
+        # Bearish: negative momentum
         if tsmom_score < -2:
             return "Trending Down", "Trend-following: exit"
-        # ADX > 25 but mixed signals (momentum neutral or MA weak)
+        # ADX > 25 but momentum neutral
         return "Trend Unclear", "Trend present, signals mixed"
 
     # === EMERGING TREND: ADX 20-25 ===

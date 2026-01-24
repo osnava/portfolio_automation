@@ -54,7 +54,7 @@ def apply_conditional_formatting(xlsx_path, num_rows):
                           mid_type='num', mid_value=0, mid_color='FFFFFF',           # White
                           end_type='num', end_value=20, end_color='63BE7B'))         # Green
 
-        # MA_Score (col G): 0 (white) → 7 (green)
+        # MA_Score (col G): 0 (white) → 7 (green) - display only
         ws.conditional_formatting.add(f'G2:G{num_rows+1}',
             ColorScaleRule(start_type='num', start_value=0, start_color='FFFFFF',   # White
                           end_type='num', end_value=7, end_color='63BE7B'))          # Green

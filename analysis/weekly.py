@@ -69,10 +69,10 @@ def calculate_technicals(ticker):
 
     # Trend-following indicators
     tsmom_score, tsmom_details = calculate_tsmom(close_weekly)
-    ma_score, ma_max, ma_details = calculate_ma_score(close_weekly, price)
+    ma_score, ma_max, ma_details = calculate_ma_score(close_weekly, price)  # Keep for display
 
-    # Regime classification (uses ticker-specific ztanh thresholds)
-    regime, regime_bias = classify_regime(adx, tsmom_score, ztanh, ma_score, ma_max, ticker=ticker)
+    # Regime classification (ADX + TSMOM + ZTanh)
+    regime, regime_bias = classify_regime(adx, tsmom_score, ztanh, ticker=ticker)
 
     return {
         'price': price,
@@ -86,9 +86,9 @@ def calculate_technicals(ticker):
         'adx': adx,
         'tsmom_score': tsmom_score,
         'tsmom_details': tsmom_details,
-        'ma_score': ma_score,
-        'ma_max': ma_max,
-        'ma_details': ma_details,
+        'ma_score': ma_score,      # Display only
+        'ma_max': ma_max,          # Display only
+        'ma_details': ma_details,  # Display only
         'regime': regime,
         'regime_bias': regime_bias
     }

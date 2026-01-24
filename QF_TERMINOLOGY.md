@@ -1,6 +1,6 @@
 # Quantitative Finance Terminology
 
-**Version:** 3.1.0 | Quick reference for framework indicators and signals.
+**Version:** 3.4.0 | Quick reference for framework indicators and signals.
 
 ---
 
@@ -134,9 +134,9 @@ Net Fed liquidity: `GLI = Fed BS - TGA - RRP`
 
 | Regime | Conditions | Mode |
 |--------|------------|------|
-| Trending Up | ADX >25 + TSMOM >2% + MA ≥60% | Trend-follow: long |
+| Trending Up | ADX >25 + TSMOM >2% | Trend-follow: long |
 | Trending Down | ADX >25 + TSMOM <-2% | Trend-follow: exit |
-| Trend Unclear | ADX >25 + mixed signals | Trend present, mixed |
+| Trend Unclear | ADX >25 + TSMOM neutral | Trend present, signals mixed |
 | Emerging Up | ADX 20-25 + TSMOM >2% | Cautious long |
 | Emerging Down | ADX 20-25 + TSMOM <-2% | Cautious exit |
 | Mean Revert Buy | ADX <20 + ZTanh ≤ oversold | Mean-reversion: long |
@@ -148,11 +148,11 @@ Net Fed liquidity: `GLI = Fed BS - TGA - RRP`
 
 ## Risk Profiles
 
-| Profile | ZTanh | TSMOM | MA Score | ADX |
-|---------|-------|-------|----------|-----|
-| Conservative | ±0.75 | ≥+10% | ≥6/7 | >30 |
-| Moderate | ±0.60 | ≥+5% | ≥5/7 | >25 |
-| Aggressive | ±0.50 | ≥+2% | ≥4/7 | >20 |
+| Profile | ZTanh | TSMOM | ADX |
+|---------|-------|-------|-----|
+| Conservative | ±0.75 | ≥+10% | >30 |
+| Moderate | ±0.60 | ≥+5% | >25 |
+| Aggressive | ±0.50 | ≥+2% | >20 |
 
 ---
 
@@ -214,4 +214,4 @@ Net Fed liquidity: `GLI = Fed BS - TGA - RRP`
 
 ---
 
-*Last updated: 2026-01-19*
+*Last updated: 2026-01-24*

@@ -57,3 +57,4 @@ KAMA_WINDOW = 10  # ER period
 KAMA_FAST = 2     # Fast EMA
 KAMA_SLOW_DAILY = 30  # Slow EMA for daily
 KAMA_SLOW_WEEKLY = 12  # Slow EMA for weekly (if needed later)
+
