@@ -1,10 +1,24 @@
 """Excel file generation and conditional formatting."""
 
 from openpyxl import load_workbook
-from openpyxl.formatting.rule import ColorScaleRule, Rule
-from openpyxl.styles import PatternFill
+from openpyxl.formatting.rule import ColorScaleRule, Rule, CellIsRule
+from openpyxl.styles import PatternFill, Border, Side
 from openpyxl.styles.differential import DifferentialStyle
 from reporting.formatters import optimize_column_widths
+
+
+def apply_borders(ws):
+    """Apply thin borders to all cells with data in the worksheet."""
+    thin_border = Border(
+        left=Side(style='thin'),
+        right=Side(style='thin'),
+        top=Side(style='thin'),
+        bottom=Side(style='thin')
+    )
+
+    for row in ws.iter_rows(min_row=1, max_row=ws.max_row, min_col=1, max_col=ws.max_column):
+        for cell in row:
+            cell.border = thin_border
 
 
 def apply_conditional_formatting(xlsx_path, num_rows):
@@ -12,10 +26,11 @@ def apply_conditional_formatting(xlsx_path, num_rows):
     Apply conditional formatting and optimize column widths for Excel file.
 
     Color Scheme:
-    - Z-scores: Red (extreme ±2) → White (neutral 0) → Yellow (moderate)
-    - Returns/TSMOM: Red (negative) → White (0) → Green (positive)
-    - ADX/Scores: White (low) → Green (high)
-    - VIX: Green (low) → Red (high) - inverted scale
+    - RSI: Green (0/oversold) -> White (50/neutral) -> Red (100/overbought)
+    - Returns/TSMOM: Red (negative) -> White (0) -> Green (positive)
+    - ADX/Scores: White (low) -> Green (high)
+    - VIX: Green (low) -> Red (high) - inverted scale
+    - BB_Position: Text-based coloring (green for below bands, red for above)
 
     Args:
         xlsx_path: Path to the Excel file
@@ -24,120 +39,137 @@ def apply_conditional_formatting(xlsx_path, num_rows):
     wb = load_workbook(xlsx_path)
 
     # === WEEKLY SHEET ===
+    # Columns: Name, Ticker, Price, RSI, RSI_Zone, TSMOM_%, MA_Score, MA_Max, ADX, Regime, Regime_Bias
     if 'Weekly' in wb.sheetnames:
         ws = wb['Weekly']
 
-        # Z-Score: -2 (red) → 0 (white) → +2 (yellow/orange)
+        # RSI (col D): 0 (green/oversold) -> 50 (white/neutral) -> 100 (red/overbought)
         ws.conditional_formatting.add(f'D2:D{num_rows+1}',
-            ColorScaleRule(start_type='num', start_value=-2, start_color='F8696B',  # Red
-                          mid_type='num', mid_value=0, mid_color='FFFFFF',          # White
-                          end_type='num', end_value=2, end_color='FFEB84'))         # Yellow
+            ColorScaleRule(start_type='num', start_value=0, start_color='63BE7B',   # Green
+                          mid_type='num', mid_value=50, mid_color='FFFFFF',         # White
+                          end_type='num', end_value=100, end_color='F8696B'))       # Red
 
-        # TSMOM_%: -20 (red) → 0 (white) → +20 (green)
-        ws.conditional_formatting.add(f'E2:E{num_rows+1}',
+        # TSMOM_% (col F): -20 (red) -> 0 (white) -> +20 (green)
+        ws.conditional_formatting.add(f'F2:F{num_rows+1}',
             ColorScaleRule(start_type='num', start_value=-20, start_color='F8696B',  # Red
                           mid_type='num', mid_value=0, mid_color='FFFFFF',           # White
                           end_type='num', end_value=20, end_color='63BE7B'))         # Green
 
-        # MA_Score: 0 (white) → 7 (green)
-        ws.conditional_formatting.add(f'F2:F{num_rows+1}',
+        # MA_Score (col G): 0 (white) -> 7 (green) - display only
+        ws.conditional_formatting.add(f'G2:G{num_rows+1}',
             ColorScaleRule(start_type='num', start_value=0, start_color='FFFFFF',   # White
                           end_type='num', end_value=7, end_color='63BE7B'))          # Green
 
-        # ADX: 10 (white) → 50 (green)
-        ws.conditional_formatting.add(f'H2:H{num_rows+1}',
+        # ADX (col I): 10 (white) -> 50 (green)
+        ws.conditional_formatting.add(f'I2:I{num_rows+1}',
             ColorScaleRule(start_type='num', start_value=10, start_color='FFFFFF',  # White
                           end_type='num', end_value=50, end_color='63BE7B'))         # Green
 
-        # Optimize column widths
+        # Apply borders and optimize column widths
+        apply_borders(ws)
         optimize_column_widths(ws)
 
     # === MOMENTUM SHEET ===
+    # Columns: Name, Ticker, 4w_Return_%, 12w_Return_%, 26w_Return_%, MA_Distance
     if 'Momentum' in wb.sheetnames:
         ws = wb['Momentum']
 
-        # All return columns: -30 (red) → 0 (white) → +30 (green)
+        # All return columns (C, D, E): -30 (red) -> 0 (white) -> +30 (green)
         for col in ['C', 'D', 'E']:  # 4w, 12w, 26w returns
             ws.conditional_formatting.add(f'{col}2:{col}{num_rows+1}',
                 ColorScaleRule(start_type='num', start_value=-30, start_color='F8696B',  # Red
                               mid_type='num', mid_value=0, mid_color='FFFFFF',           # White
                               end_type='num', end_value=30, end_color='63BE7B'))         # Green
 
-        # Optimize column widths
+        # Apply borders and optimize column widths
+        apply_borders(ws)
         optimize_column_widths(ws)
 
     # === DAILY SHEET ===
+    # Columns: Name, Ticker, Price, RSI, RSI_Zone, ADX, ADX_Action, DI_Bias, KAMA, KAMA_Dist%, Price_vs_KAMA, BB_Position
     if 'Daily' in wb.sheetnames:
         ws = wb['Daily']
 
-        # Z-Score: -2 (red) → 0 (white) → +2 (yellow)
-        ws.conditional_formatting.add(f'D2:D{num_rows+1}',
-            ColorScaleRule(start_type='num', start_value=-2, start_color='F8696B',
-                          mid_type='num', mid_value=0, mid_color='FFFFFF',
-                          end_type='num', end_value=2, end_color='FFEB84'))
-
-        # ADX: 10 (white) → 50 (green)
-        ws.conditional_formatting.add(f'G2:G{num_rows+1}',
-            ColorScaleRule(start_type='num', start_value=10, start_color='FFFFFF',
-                          end_type='num', end_value=50, end_color='63BE7B'))
-
-        # Crosses: Highlight Bullish in green, Bearish in red
         green_fill = PatternFill(start_color='C6EFCE', end_color='C6EFCE', fill_type='solid')
         red_fill = PatternFill(start_color='FFC7CE', end_color='FFC7CE', fill_type='solid')
 
-        # Use formula-based rules for text contains
+        # RSI (col D): 0 (green) -> 50 (white) -> 100 (red)
+        ws.conditional_formatting.add(f'D2:D{num_rows+1}',
+            ColorScaleRule(start_type='num', start_value=0, start_color='63BE7B',
+                          mid_type='num', mid_value=50, mid_color='FFFFFF',
+                          end_type='num', end_value=100, end_color='F8696B'))
+
+        # ADX (col F): 10 (white) -> 50 (green)
         ws.conditional_formatting.add(f'F2:F{num_rows+1}',
-            Rule(type='containsText', operator='containsText', formula=['SEARCH("Bullish",F2)'],
+            ColorScaleRule(start_type='num', start_value=10, start_color='FFFFFF',
+                          end_type='num', end_value=50, end_color='63BE7B'))
+
+        # DI_Bias (col H): Highlight Bullish in green, Bearish in red
+        ws.conditional_formatting.add(f'H2:H{num_rows+1}',
+            Rule(type='containsText', operator='containsText', formula=['SEARCH("Bullish",H2)'],
                  dxf=DifferentialStyle(fill=green_fill), text='Bullish'))
-        ws.conditional_formatting.add(f'F2:F{num_rows+1}',
-            Rule(type='containsText', operator='containsText', formula=['SEARCH("Bearish",F2)'],
+        ws.conditional_formatting.add(f'H2:H{num_rows+1}',
+            Rule(type='containsText', operator='containsText', formula=['SEARCH("Bearish",H2)'],
                  dxf=DifferentialStyle(fill=red_fill), text='Bearish'))
 
-        # Consensus: -1 (red) → 0 (white) → +1 (green)
-        ws.conditional_formatting.add(f'H2:H{num_rows+1}',
-            ColorScaleRule(start_type='num', start_value=-1, start_color='F8696B',
+        # KAMA_Dist% (col J): -10 (red) -> 0 (white) -> +10 (green)
+        ws.conditional_formatting.add(f'J2:J{num_rows+1}',
+            ColorScaleRule(start_type='num', start_value=-10, start_color='F8696B',
                           mid_type='num', mid_value=0, mid_color='FFFFFF',
-                          end_type='num', end_value=1, end_color='63BE7B'))
+                          end_type='num', end_value=10, end_color='63BE7B'))
 
-        # Confidence: 0 (white) → 1 (green)
-        ws.conditional_formatting.add(f'I2:I{num_rows+1}',
-            ColorScaleRule(start_type='num', start_value=0, start_color='FFFFFF',
-                          end_type='num', end_value=1, end_color='63BE7B'))
+        # Price_vs_KAMA (col K): Highlight Above in green, Below in red
+        ws.conditional_formatting.add(f'K2:K{num_rows+1}',
+            Rule(type='containsText', operator='containsText', formula=['SEARCH("Above",K2)'],
+                 dxf=DifferentialStyle(fill=green_fill), text='Above'))
+        ws.conditional_formatting.add(f'K2:K{num_rows+1}',
+            Rule(type='containsText', operator='containsText', formula=['SEARCH("Below",K2)'],
+                 dxf=DifferentialStyle(fill=red_fill), text='Below'))
 
-        # Optimize column widths
+        # BB_Position (col L): Highlight "Below" positions in green (oversold), "Above" in red (overbought)
+        ws.conditional_formatting.add(f'L2:L{num_rows+1}',
+            Rule(type='containsText', operator='containsText', formula=['SEARCH("Below",L2)'],
+                 dxf=DifferentialStyle(fill=green_fill), text='Below'))
+        ws.conditional_formatting.add(f'L2:L{num_rows+1}',
+            Rule(type='containsText', operator='containsText', formula=['SEARCH("Above",L2)'],
+                 dxf=DifferentialStyle(fill=red_fill), text='Above'))
+
+        # Apply borders and optimize column widths
+        apply_borders(ws)
         optimize_column_widths(ws)
 
     # === MACRO SHEET ===
     if 'Macro' in wb.sheetnames:
         ws = wb['Macro']
 
-        # VIX (row with VIX indicator): 10 (green/calm) → 40 (red/fear) - INVERTED
-        # Find the row with VIX indicator
-        for row_idx, row in enumerate(ws.iter_rows(min_row=1, max_row=10, min_col=1, max_col=1), start=1):
-            if row[0].value == 'VIX':
-                ws.conditional_formatting.add(f'B{row_idx}:B{row_idx}',
-                    ColorScaleRule(start_type='num', start_value=10, start_color='63BE7B',  # Green
-                                  end_type='num', end_value=40, end_color='F8696B'))        # Red
-                break
+        # VIX threshold fills (single-cell, so use CellIsRule instead of ColorScale)
+        vix_green = PatternFill(start_color='C6EFCE', end_color='C6EFCE', fill_type='solid')
+        vix_yellow = PatternFill(start_color='FFEB9C', end_color='FFEB9C', fill_type='solid')
+        vix_red = PatternFill(start_color='FFC7CE', end_color='FFC7CE', fill_type='solid')
 
-        # -Z(VIX): -2 (red/fear) → 0 (white) → +2 (orange/complacency)
-        for row_idx, row in enumerate(ws.iter_rows(min_row=1, max_row=10, min_col=1, max_col=1), start=1):
-            if row[0].value == '-Z(VIX)':
-                ws.conditional_formatting.add(f'B{row_idx}:B{row_idx}',
-                    ColorScaleRule(start_type='num', start_value=-2, start_color='F8696B',
-                                  mid_type='num', mid_value=0, mid_color='FFFFFF',
-                                  end_type='num', end_value=2, end_color='FFEB84'))
-                break
-
-        # F&G indices: 0 (red/fear) → 50 (white) → 100 (red/greed)
         for row_idx, row in enumerate(ws.iter_rows(min_row=1, max_row=15, min_col=1, max_col=1), start=1):
-            if row[0].value in ['F&G Stocks', 'F&G Crypto']:
-                ws.conditional_formatting.add(f'B{row_idx}:B{row_idx}',
-                    ColorScaleRule(start_type='num', start_value=0, start_color='F8696B',
-                                  mid_type='num', mid_value=50, mid_color='FFFFFF',
-                                  end_type='num', end_value=100, end_color='F8696B'))
+            if row[0].value == 'VIX':
+                cell = f'B{row_idx}:B{row_idx}'
+                ws.conditional_formatting.add(cell,
+                    CellIsRule(operator='lessThan', formula=['15'], fill=vix_green))
+                ws.conditional_formatting.add(cell,
+                    CellIsRule(operator='between', formula=['20', '30'], fill=vix_yellow))
+                ws.conditional_formatting.add(cell,
+                    CellIsRule(operator='greaterThanOrEqual', formula=['30'], fill=vix_red))
 
-        # Optimize column widths
+        # VIX RSI: contrary indicator (high RSI = fear = buying opportunity)
+        for row_idx, row in enumerate(ws.iter_rows(min_row=1, max_row=15, min_col=1, max_col=1), start=1):
+            if row[0].value == 'VIX RSI':
+                cell = f'B{row_idx}:B{row_idx}'
+                ws.conditional_formatting.add(cell,
+                    CellIsRule(operator='greaterThan', formula=['70'], fill=vix_green))
+                ws.conditional_formatting.add(cell,
+                    CellIsRule(operator='between', formula=['40', '60'], fill=vix_yellow))
+                ws.conditional_formatting.add(cell,
+                    CellIsRule(operator='lessThan', formula=['30'], fill=vix_red))
+
+        # Apply borders and optimize column widths
+        apply_borders(ws)
         optimize_column_widths(ws)
 
     wb.save(xlsx_path)

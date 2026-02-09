@@ -2,15 +2,26 @@
 
 import pandas as pd
 from ta.trend import ADXIndicator
+from ta.momentum import KAMAIndicator
 from data.cache import get_cached_ticker
-from indicators.zscore import calculate_zscore
-from indicators.tema import calculate_tema, calculate_tema_ensemble, detect_cross
+from indicators.rsi_bb import calculate_rsi, get_rsi_zone, calculate_bollinger_bands, get_bb_position
+from config import ADX_DAILY_WINDOW, ADX_NO_TREND, ADX_TREND_EMERGING, ADX_STRONG_TREND
+from config import KAMA_WINDOW, KAMA_FAST, KAMA_SLOW_DAILY, BB_PERIOD
 
 
 def calculate_daily_technicals(ticker):
-    """Calculate daily (1d) technical indicators using TEMA crosses."""
-    # Fetch 1 year of daily data
-    data = get_cached_ticker(ticker, period="1y", interval="1d")
+    """
+    Calculate daily (1d) technical indicators.
+
+    Indicators:
+        - RSI: 14-period Relative Strength Index (0-100)
+        - ADX: 14-period Average Directional Index with trend classification
+        - DI_Bias: Directional indicator bias (+DI vs -DI)
+        - KAMA: Kaufman's Adaptive Moving Average (10/2/30) as trend filter
+        - BB_Position: Bollinger Bands position classification
+    """
+    # Fetch 1 year of daily data (always fresh - daily prices are critical for entry timing)
+    data = get_cached_ticker(ticker, period="1y", interval="1d", fresh=True)
 
     if data.empty or len(data) < 200:
         return None
@@ -19,96 +30,66 @@ def calculate_daily_technicals(ticker):
     high = data['High']
     low = data['Low']
     price = close.iloc[-1]
-    daily_date = pd.Timestamp(data.index[-1]).strftime('%Y-%m-%d')  # Store last daily candle date
+    daily_date = pd.Timestamp(data.index[-1]).strftime('%Y-%m-%d')
 
-    # Daily Z-score (20-day window)
-    zscore_daily, zone_daily = calculate_zscore(close, window=20)
+    # Daily RSI (14-period)
+    rsi_daily = calculate_rsi(close)
+    rsi_zone_daily = get_rsi_zone(rsi_daily)
 
-    # Calculate TEMA for 20, 50, 200 periods
-    tema20 = calculate_tema(close, 20)
-    tema50 = calculate_tema(close, 50)
-    tema200 = calculate_tema(close, 200)
-
-    # Current and previous values for cross detection
-    tema20_curr = tema20.iloc[-1]
-    tema20_prev = tema20.iloc[-2]
-    tema50_curr = tema50.iloc[-1]
-    tema50_prev = tema50.iloc[-2]
-    tema200_curr = tema200.iloc[-1]
-    tema200_prev = tema200.iloc[-2]
-
-    # Detect crosses
-    cross_20_50 = detect_cross(tema20_curr, tema20_prev, tema50_curr, tema50_prev)
-    cross_50_200 = detect_cross(tema50_curr, tema50_prev, tema200_curr, tema200_prev)
-
-    # TEMA alignment (similar to MA score but with TEMA)
-    tema_alignment = 0
-    if tema20_curr > tema50_curr:
-        tema_alignment += 1
-    if tema50_curr > tema200_curr:
-        tema_alignment += 1
-    if price > tema20_curr:
-        tema_alignment += 1
-
-    # Daily ADX
-    adx_ind = ADXIndicator(high, low, close, window=14)
+    # Daily ADX (14-period)
+    adx_ind = ADXIndicator(high, low, close, window=ADX_DAILY_WINDOW)
     adx_daily = adx_ind.adx().iloc[-1]
     plus_di_daily = adx_ind.adx_pos().iloc[-1]
     minus_di_daily = adx_ind.adx_neg().iloc[-1]
 
-    # Daily trend classification
-    if tema20_curr > tema50_curr > tema200_curr and price > tema20_curr:
-        trend_daily = "Strong Bullish"
-    elif tema20_curr > tema50_curr and price > tema20_curr:
-        trend_daily = "Bullish"
-    elif tema20_curr < tema50_curr < tema200_curr and price < tema20_curr:
-        trend_daily = "Strong Bearish"
-    elif tema20_curr < tema50_curr and price < tema20_curr:
-        trend_daily = "Bearish"
+    # ADX action recommendation
+    if adx_daily < ADX_NO_TREND:
+        adx_action = "Mean-reversion"
+    elif adx_daily > ADX_TREND_EMERGING:
+        adx_action = "Trend-follow"
     else:
-        trend_daily = "Mixed"
+        adx_action = "Emerging"
 
-    # Distance from TEMAs (%)
-    tema20_dist = ((price - tema20_curr) / tema20_curr) * 100
-    tema50_dist = ((price - tema50_curr) / tema50_curr) * 100
-    tema200_dist = ((price - tema200_curr) / tema200_curr) * 100
-
-    # Multi-period TEMA ensemble with volatility adjustment
-    consensus, confidence, ensemble_str, ensemble_detail, vol_scalar = calculate_tema_ensemble(close, price)
-
-    # Enhanced trend classification using ensemble
-    if confidence >= 0.67:  # At least 2/3 periods agree
-        if consensus > 0:
-            trend_ensemble = "Strong Bullish" if confidence == 1.0 else "Bullish"
-        elif consensus < 0:
-            trend_ensemble = "Strong Bearish" if confidence == 1.0 else "Bearish"
-        else:
-            trend_ensemble = "Mixed"
+    # Directional bias from DI
+    if plus_di_daily > minus_di_daily:
+        di_bias = "Bullish"
+    elif minus_di_daily > plus_di_daily:
+        di_bias = "Bearish"
     else:
-        trend_ensemble = "Low Confidence"
+        di_bias = "Neutral"
+
+    # KAMA - Kaufman's Adaptive Moving Average (trend filter)
+    # Standard params: window=10 (ER period), pow1=2 (fast), pow2=30 (slow)
+    kama_ind = KAMAIndicator(close, window=KAMA_WINDOW, pow1=KAMA_FAST, pow2=KAMA_SLOW_DAILY)
+    kama = kama_ind.kama().iloc[-1]
+
+    # KAMA distance (percentage)
+    kama_dist = ((price - kama) / kama) * 100
+
+    # Price vs KAMA classification
+    if kama_dist > 2.0:
+        price_vs_kama = "Extended Above"
+    elif kama_dist > 0:
+        price_vs_kama = "Above"
+    elif kama_dist > -2.0:
+        price_vs_kama = "Below"
+    else:
+        price_vs_kama = "Extended Below"
+
+    # Bollinger Bands
+    bb_bands = calculate_bollinger_bands(close, period=BB_PERIOD)
+    bb_position = get_bb_position(price, bb_bands)
 
     return {
         'price': price,
         'daily_date': daily_date,
-        'zscore_daily': zscore_daily,
-        'zscore_zone_daily': zone_daily,
-        'tema20': round(tema20_curr, 2),
-        'tema50': round(tema50_curr, 2),
-        'tema200': round(tema200_curr, 2),
-        'tema20_dist': round(tema20_dist, 2),
-        'tema50_dist': round(tema50_dist, 2),
-        'tema200_dist': round(tema200_dist, 2),
-        'cross_20_50': cross_20_50,
-        'cross_50_200': cross_50_200,
-        'tema_alignment': f"{tema_alignment}/3",
+        'rsi_daily': rsi_daily,
+        'rsi_zone_daily': rsi_zone_daily,
         'adx_daily': round(adx_daily, 1),
-        'plus_di_daily': round(plus_di_daily, 1),
-        'minus_di_daily': round(minus_di_daily, 1),
-        'trend_daily': trend_daily,
-        # NEW: Ensemble metrics
-        'tema_consensus': consensus,
-        'tema_confidence': confidence,
-        'tema_ensemble': ensemble_str,
-        'trend_ensemble': trend_ensemble,
-        'vol_scalar': vol_scalar,
+        'adx_action': adx_action,
+        'di_bias': di_bias,
+        'kama': round(kama, 4),
+        'kama_dist': round(kama_dist, 2),
+        'price_vs_kama': price_vs_kama,
+        'bb_position': bb_position,
     }
