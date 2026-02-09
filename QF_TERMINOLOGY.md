@@ -1,29 +1,38 @@
 # Quantitative Finance Terminology
 
-**Version:** 3.4.0 | Quick reference for framework indicators and signals.
+**Version:** 4.0.0 | Quick reference for framework indicators and signals.
 
 ---
 
 ## Core Indicators
 
-### ZTanh
-Learned z-score transformation with tanh activation. Bounded [-1, +1].
+### RSI (Relative Strength Index)
+14-period momentum oscillator. Range: 0-100.
 
-```
-ZTanh = tanh(w1*Z_20 + w2*Z_50 + w3*Z_100 + w4*Z_200 + bias)
-```
+| RSI | Zone | Interpretation |
+|-----|------|----------------|
+| > 70 | Overbought | Potential reversal down |
+| 30-70 | Neutral | No extreme reading |
+| < 30 | Oversold | Potential reversal up |
 
-| Zone | Weekly | Daily |
-|------|--------|-------|
-| Extreme OB | > 0.85 | > 0.85 |
-| Overbought | 0.75-0.85 | 0.70-0.85 |
-| Upper | 0.65-0.75 | 0.50-0.70 |
-| Neutral | -0.10 to 0.65 | -0.50 to 0.50 |
-| Lower | -0.40 to -0.10 | -0.70 to -0.50 |
-| Oversold | -0.60 to -0.40 | -0.85 to -0.70 |
-| Extreme OS | < -0.60 | < -0.85 |
+**Parameters:** Period = 14 (standard)
 
-**Note:** Thresholds are ticker-specific (see `thresholds.json`).
+---
+
+### Bollinger Bands
+20-period moving average with standard deviation bands at 1, 2, 3 STD.
+
+| Position | Condition | Interpretation |
+|----------|-----------|----------------|
+| Above +3 STD | Price > Upper 3 | Extreme overbought |
+| Above +2 STD | Price > Upper 2 | Overbought |
+| Above +1 STD | Price > Upper 1 | Above average |
+| Within Bands | Between -1 and +1 | Normal range |
+| Below -1 STD | Price < Lower 1 | Below average |
+| Below -2 STD | Price < Lower 2 | Oversold |
+| Below -3 STD | Price < Lower 3 | Extreme oversold |
+
+**Parameters:** Period = 20, STD levels = 1, 2, 3
 
 ---
 
@@ -82,18 +91,18 @@ Moving average alignment score.
 
 ---
 
-### VIX ZTanh (Contrary Indicator)
-VIX sentiment using negated weights. Positive = Greed, Negative = Fear.
+### VIX RSI (Contrary Indicator)
+VIX sentiment using RSI. High RSI = High VIX = Fear = BUY opportunity.
 
-| VIX ZTanh | Sentiment | Action |
-|-----------|-----------|--------|
-| > +0.70 | Extreme Greed | Trim, add hedges |
-| +0.50 to +0.70 | Greed | Caution on buys |
-| +0.20 to +0.50 | Mild Greed | Normal |
-| -0.20 to +0.20 | Neutral | Standard ops |
-| -0.50 to -0.20 | Mild Fear | Pullback opportunity |
-| -0.70 to -0.50 | Fear | Contrarian buy |
-| < -0.70 | Extreme Fear | Strong contrarian buy |
+| VIX RSI | Sentiment | Action |
+|---------|-----------|--------|
+| > 80 | Extreme Fear | Strong contrarian buy |
+| 70-80 | Fear | Contrarian buy |
+| 60-70 | Mild Fear | Pullback opportunity |
+| 40-60 | Neutral | Standard ops |
+| 30-40 | Mild Greed | Caution |
+| 20-30 | Greed | Trim longs |
+| < 20 | Extreme Greed | High caution |
 
 ---
 
@@ -109,24 +118,44 @@ Adaptive MA that adjusts to market noise. Used as trend filter on daily.
 | Below | < KAMA | Trend weak, caution |
 | Extended Below | < KAMA - 2% | Oversold bounce possible |
 
-**Key Rule:** ZTanh Oversold + Price > KAMA = BUY. ZTanh Oversold + Price < KAMA = WAIT.
+**Key Rule:** RSI Oversold + Price > KAMA = BUY. RSI Oversold + Price < KAMA = WAIT.
 
 ---
 
 ### GLI (Global Liquidity Index)
-Net Fed liquidity: `GLI = Fed BS - TGA - RRP`
+Global central bank liquidity aggregated from Fed, ECB, BOJ, and major economy M2.
 
-| Component | FRED Code | Description |
-|-----------|-----------|-------------|
-| Fed BS | WALCL | Fed total assets |
-| TGA | WTREGEN | Treasury cash account |
-| RRP | RRPONTSYD | Reverse repo (parked cash) |
+**Formula:**
+```
+Net_Fed = FED_BS - TGA - RRP
+GLI = Net_Fed + ECB_BS_USD + BOJ_BS_USD + Global_M2
+```
+
+**Components (all converted to USD):**
+
+| Component | FRED Code | Currency | Frequency |
+|-----------|-----------|----------|-----------|
+| Fed BS | WALCL | USD | Weekly |
+| TGA | WTREGEN | USD | Weekly |
+| RRP | RRPONTSYD | USD | Daily |
+| ECB BS | ECBASSETSW | EUR | Weekly |
+| BOJ BS | JPNASSETS | JPY | Monthly |
+| USA M2 | M2SL | USD | Monthly |
+| EUR M2 | MYAGM2EZM196N | EUR | Monthly |
+| JPY M2 | MYAGM2JPM189S | JPY | Monthly |
+| CNY M2 | MYAGM2CNM189N | CNY | Monthly |
+
+**FX Conversion (FRED):** DEXUSEU (EUR), DEXJPUS (JPY), DEXCHUS (CNY)
 
 | GLI 4w Change | Signal |
 |---------------|--------|
 | > +1% | Expanding (risk-on) |
 | < -1% | Contracting (risk-off) |
 | < -2% | Override: downgrade BUYs |
+
+**Lagged GLI (10w ago):** Markets follow liquidity with ~10 week delay. The "10w ago" value shows liquidity conditions that are now affecting prices. Used for prose context, not mechanical signals.
+
+**Fallback:** If global data unavailable, reverts to US-only (Net Fed).
 
 ---
 
@@ -139,20 +168,20 @@ Net Fed liquidity: `GLI = Fed BS - TGA - RRP`
 | Trend Unclear | ADX >25 + TSMOM neutral | Trend present, signals mixed |
 | Emerging Up | ADX 20-25 + TSMOM >2% | Cautious long |
 | Emerging Down | ADX 20-25 + TSMOM <-2% | Cautious exit |
-| Mean Revert Buy | ADX <20 + ZTanh ≤ oversold | Mean-reversion: long |
-| Mean Revert Sell | ADX <20 + ZTanh ≥ overbought | Mean-reversion: short |
-| Choppy | ADX <20 + no extreme ZTanh | No-trade mode |
+| Mean Revert Buy | ADX <20 + RSI <= 30 | Mean-reversion: long |
+| Mean Revert Sell | ADX <20 + RSI >= 70 | Mean-reversion: short |
+| Choppy | ADX <20 + RSI neutral | No-trade mode |
 | Neutral | ADX 20-25 + TSMOM neutral | No clear edge |
 
 ---
 
 ## Risk Profiles
 
-| Profile | ZTanh | TSMOM | ADX |
-|---------|-------|-------|-----|
-| Conservative | ±0.75 | ≥+10% | >30 |
-| Moderate | ±0.60 | ≥+5% | >25 |
-| Aggressive | ±0.50 | ≥+2% | >20 |
+| Profile | RSI | TSMOM | ADX |
+|---------|-----|-------|-----|
+| Conservative | <=25 / >=75 | >=+10% | >30 |
+| Moderate | <=30 / >=70 | >=+5% | >25 |
+| Aggressive | <=35 / >=65 | >=+2% | >20 |
 
 ---
 
@@ -178,22 +207,22 @@ Net Fed liquidity: `GLI = Fed BS - TGA - RRP`
 
 ## Quick Reference
 
-### ADX + ZTanh Matrix
-| ADX | ZTanh | Action |
-|-----|-------|--------|
-| >25 | <-0.40 | BUY THE DIP |
-| >25 | >+0.75 | SELL THE TOP |
-| <20 | <-0.50 | Mean-reversion BUY |
-| <20 | >+0.50 | Mean-reversion SELL |
-| 20-25 | Neutral | WAIT |
+### ADX + RSI Matrix
+| ADX | RSI | Action |
+|-----|-----|--------|
+| >25 | <30 | BUY THE DIP |
+| >25 | >70 | SELL THE TOP |
+| <20 | <30 | Mean-reversion BUY |
+| <20 | >70 | Mean-reversion SELL |
+| 20-25 | 30-70 | WAIT |
 
-### VIX Level + VIX ZTanh
-| VIX | VIX ZTanh | State |
-|-----|-----------|-------|
-| <15 | >+0.50 | Extreme complacency |
-| 15-20 | neutral | Normal |
-| 20-30 | <-0.50 | Elevated fear |
-| >30 | <-0.70 | Panic (contrarian buy) |
+### VIX Level + VIX RSI
+| VIX | VIX RSI | State |
+|-----|---------|-------|
+| <15 | <30 | Extreme complacency |
+| 15-20 | 40-60 | Normal |
+| 20-30 | 60-80 | Elevated fear |
+| >30 | >80 | Panic (contrarian buy) |
 
 ---
 
@@ -202,16 +231,19 @@ Net Fed liquidity: `GLI = Fed BS - TGA - RRP`
 | Acronym | Meaning |
 |---------|---------|
 | ADX | Average Directional Index |
+| BB | Bollinger Bands |
 | DI | Directional Indicator |
 | GLI | Global Liquidity Index |
+| KAMA | Kaufman's Adaptive Moving Average |
 | MA | Moving Average |
 | OB/OS | Overbought/Oversold |
 | RRP | Reverse Repo |
+| RSI | Relative Strength Index |
+| STD | Standard Deviation |
 | TGA | Treasury General Account |
 | TSMOM | Time-Series Momentum |
 | VIX | CBOE Volatility Index |
-| ZTanh | Z-score with tanh activation |
 
 ---
 
-*Last updated: 2026-01-24*
+*Last updated: 2026-01-29*

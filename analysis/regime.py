@@ -1,37 +1,37 @@
 """Market regime classification for strategy selection."""
 
-from config import ADX_NO_TREND, ADX_TREND_EMERGING
-from indicators.ztanh import get_ticker_thresholds
+from config import ADX_NO_TREND, ADX_TREND_EMERGING, RSI_OVERSOLD, RSI_OVERBOUGHT
 
 
-def classify_regime(adx, tsmom_score, ztanh, ticker='default'):
+def classify_regime(adx, tsmom_score, rsi):
     """
     Classify market regime. Returns (regime, mode).
 
     ADX Levels:
-        > 25: Strong trend → trend-following mode
-        20-25: Emerging trend → cautious trend-following
-        < 20: No trend → mean-reversion mode
+        > 25: Strong trend -> trend-following mode
+        20-25: Emerging trend -> cautious trend-following
+        < 20: No trend -> mean-reversion mode
 
     TSMOM Levels:
         > +2%: Positive momentum
         < -2%: Negative momentum
         [-2%, +2%]: Neutral momentum
 
+    RSI Levels:
+        < 30: Oversold
+        > 70: Overbought
+        30-70: Neutral
+
     Args:
         adx: ADX indicator value
         tsmom_score: Time-series momentum score (%)
-        ztanh: ZTanh indicator value [-1, +1]
-        ticker: Ticker symbol for threshold lookup
+        rsi: RSI indicator value (0-100)
 
     Returns:
         tuple: (regime_name, mode_description)
     """
     if adx is None or tsmom_score is None:
         return "Unknown", "Insufficient data"
-
-    # Get ticker-specific thresholds for weekly timeframe
-    thresholds = get_ticker_thresholds(ticker, timeframe='weekly')
 
     # === STRONG TREND: ADX > 25 ===
     if adx > ADX_TREND_EMERGING:
@@ -52,11 +52,11 @@ def classify_regime(adx, tsmom_score, ztanh, ticker='default'):
             return "Emerging Down", "Emerging trend: cautious exit"
         return "Neutral", "No clear edge"
 
-    # === NO TREND: ADX < 20 → mean-reversion mode ===
-    if ztanh is not None:
-        if ztanh <= thresholds['oversold']:
+    # === NO TREND: ADX < 20 -> mean-reversion mode ===
+    if rsi is not None:
+        if rsi <= RSI_OVERSOLD:
             return "Mean Revert Buy", "Mean-reversion: long"
-        if ztanh >= thresholds['overbought']:
+        if rsi >= RSI_OVERBOUGHT:
             return "Mean Revert Sell", "Mean-reversion: short"
 
     return "Choppy", "No-trade mode"

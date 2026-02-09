@@ -42,31 +42,43 @@ def main():
     # Collect macro data
     macro_data = []
 
-    # GLI
+    # GLI (Global Liquidity Index)
     print("Fetching GLI data...")
     try:
         if gli := calculate_gli():
+            unit = gli.get('unit', 'Trillions USD')
+            scope = 'Global' if gli.get('is_global') else 'US-only'
             macro_data.append({
-                'Indicator': 'Global Liquidity',
+                'Indicator': f'Global Liquidity ({scope})',
                 'Value': round(gli['value'], 2),
-                'Unit': 'Billions USD',
+                'Unit': unit,
                 'Signal': gli['trend'],
-                'Detail': f"4w: {format_sign(gli['mom_pct'])}% | 12w: {format_sign(gli['qoq_pct'])}%"
+                'Detail': f"4w: {format_sign(gli['mom_pct'])}% | 12w: {format_sign(gli['qoq_pct'])}%" + (f" | 10w ago: {format_sign(gli['lagged_10w_pct'])}%" if gli.get('lagged_10w_pct') is not None else "")
             })
+            # Add component breakdown if global data available
+            if gli.get('is_global') and gli.get('components'):
+                c = gli['components']
+                macro_data.append({
+                    'Indicator': 'GLI Components',
+                    'Value': '-',
+                    'Unit': 'Trillions USD',
+                    'Signal': '-',
+                    'Detail': f"Fed Net: {c.get('net_fed', 'N/A')}T | ECB: {c.get('ecb', 'N/A')}T | BOJ: {c.get('boj', 'N/A')}T | M2: {c.get('global_m2', 'N/A')}T"
+                })
         else:
             macro_data.append({'Indicator': 'Global Liquidity', 'Value': None, 'Unit': None, 'Signal': 'Error', 'Detail': 'Error'})
     except Exception:
         macro_data.append({'Indicator': 'Global Liquidity', 'Value': None, 'Unit': None, 'Signal': 'Error', 'Detail': 'Error'})
 
-    # VIX with ZTanh (sentiment: positive=greed, negative=fear)
+    # VIX with RSI (sentiment: high RSI = fear, low RSI = greed - contrary indicator)
     print("Fetching VIX data...")
     try:
-        vix, vix_ztanh, vix_sentiment = get_vix()
+        vix, vix_rsi, vix_sentiment = get_vix()
         if vix:
             vix_level = get_vix_level(vix)
             macro_data.append({'Indicator': 'VIX', 'Value': round(vix, 2), 'Unit': 'Index', 'Signal': vix_level, 'Detail': ''})
-            if vix_ztanh is not None:
-                macro_data.append({'Indicator': 'VIX ZTanh', 'Value': round(vix_ztanh, 3), 'Unit': '[-1, +1]', 'Signal': vix_sentiment, 'Detail': ''})
+            if vix_rsi is not None:
+                macro_data.append({'Indicator': 'VIX RSI', 'Value': round(vix_rsi, 2), 'Unit': '[0-100]', 'Signal': vix_sentiment, 'Detail': ''})
     except Exception:
         macro_data.append({'Indicator': 'VIX', 'Value': None, 'Unit': None, 'Signal': 'Error', 'Detail': 'Error'})
 
@@ -127,8 +139,8 @@ def main():
                 'Name': name,
                 'Ticker': ticker,
                 'Price': round(tech['price'], 4),
-                'ZTanh': round(tech['ztanh'], 3) if tech['ztanh'] is not None else None,
-                'ZTanh_Zone': tech['ztanh_zone'],
+                'RSI': round(tech['rsi'], 2) if tech['rsi'] is not None else None,
+                'RSI_Zone': tech['rsi_zone'],
                 'TSMOM_%': round(tech['tsmom_score'], 2) if tech['tsmom_score'] is not None else None,
                 'MA_Score': tech['ma_score'] if tech['ma_score'] is not None else None,
                 'MA_Max': tech['ma_max'] if tech['ma_max'] is not None else None,
@@ -137,20 +149,15 @@ def main():
                 'Regime_Bias': tech['regime_bias']
             })
 
-            # Momentum details row - extract numeric values
-            if tech.get('tsmom_details'):
-                details = tech['tsmom_details']
-                # Parse "4w: +2.5%" -> 2.5
-                ret_4w = float(details[0].split(': ')[1].rstrip('%')) if len(details) > 0 else None
-                ret_12w = float(details[1].split(': ')[1].rstrip('%')) if len(details) > 1 else None
-                ret_26w = float(details[2].split(': ')[1].rstrip('%')) if len(details) > 2 else None
-
+            # Momentum details row - use numeric returns directly
+            returns = tech.get('tsmom_returns', [])
+            if returns:
                 momentum_rows.append({
                     'Name': name,
                     'Ticker': ticker,
-                    '4w_Return_%': ret_4w,
-                    '12w_Return_%': ret_12w,
-                    '26w_Return_%': ret_26w,
+                    '4w_Return_%': returns[0] if len(returns) > 0 else None,
+                    '12w_Return_%': returns[1] if len(returns) > 1 else None,
+                    '26w_Return_%': returns[2] if len(returns) > 2 else None,
                     'MA_Distance': tech['ma_distance']  # Keep as text (complex format)
                 })
         else:
@@ -158,8 +165,8 @@ def main():
                 'Name': name,
                 'Ticker': ticker,
                 'Price': None,
-                'ZTanh': None,
-                'ZTanh_Zone': 'Error',
+                'RSI': None,
+                'RSI_Zone': 'Error',
                 'TSMOM_%': None,
                 'MA_Score': None,
                 'MA_Max': None,
@@ -175,28 +182,30 @@ def main():
                 'Name': name,
                 'Ticker': ticker,
                 'Price': round(daily_tech['price'], 4),
-                'ZTanh': round(daily_tech['ztanh_daily'], 3) if daily_tech['ztanh_daily'] is not None else None,
-                'ZTanh_Zone': daily_tech['ztanh_zone_daily'],
+                'RSI': round(daily_tech['rsi_daily'], 2) if daily_tech['rsi_daily'] is not None else None,
+                'RSI_Zone': daily_tech['rsi_zone_daily'],
                 'ADX': daily_tech['adx_daily'],
                 'ADX_Action': daily_tech['adx_action'],
                 'DI_Bias': daily_tech['di_bias'],
                 'KAMA': daily_tech['kama'],
                 'KAMA_Dist%': daily_tech['kama_dist'],
                 'Price_vs_KAMA': daily_tech['price_vs_kama'],
+                'BB_Position': daily_tech['bb_position'],
             })
         else:
             daily_rows.append({
                 'Name': name,
                 'Ticker': ticker,
                 'Price': None,
-                'ZTanh': None,
-                'ZTanh_Zone': 'Error',
+                'RSI': None,
+                'RSI_Zone': 'Error',
                 'ADX': None,
                 'ADX_Action': 'Error',
                 'DI_Bias': 'Error',
                 'KAMA': None,
                 'KAMA_Dist%': None,
                 'Price_vs_KAMA': 'Error',
+                'BB_Position': 'Error',
             })
 
     # Write XLSX file with multiple sheets

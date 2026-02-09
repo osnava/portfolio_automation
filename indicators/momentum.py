@@ -11,18 +11,18 @@ def calculate_tsmom(close, lookbacks=TSMOM_LOOKBACKS):
     Uses ROCIndicator (Rate of Change) from ta library.
     Returns the mean percentage return across all lookback windows.
     """
-    if len(close) < max(lookbacks):
-        return None, []
+    if len(close) <= max(lookbacks):
+        return None, [], []
 
     returns = []
     details = []
     for lb in lookbacks:
         roc = ROCIndicator(close, window=lb).roc().iloc[-1]
-        returns.append(roc)
+        returns.append(round(roc, 2))
         details.append(f"{lb}w: {roc:+.1f}%")
 
     composite = sum(returns) / len(returns)
-    return round(composite, 2), details
+    return round(composite, 2), details, returns
 
 
 def calculate_ma_score(close, price):

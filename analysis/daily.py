@@ -4,9 +4,9 @@ import pandas as pd
 from ta.trend import ADXIndicator
 from ta.momentum import KAMAIndicator
 from data.cache import get_cached_ticker
-from indicators.ztanh import calculate_ztanh, get_ztanh_zone
+from indicators.rsi_bb import calculate_rsi, get_rsi_zone, calculate_bollinger_bands, get_bb_position
 from config import ADX_DAILY_WINDOW, ADX_NO_TREND, ADX_TREND_EMERGING, ADX_STRONG_TREND
-from config import KAMA_WINDOW, KAMA_FAST, KAMA_SLOW_DAILY
+from config import KAMA_WINDOW, KAMA_FAST, KAMA_SLOW_DAILY, BB_PERIOD
 
 
 def calculate_daily_technicals(ticker):
@@ -14,10 +14,11 @@ def calculate_daily_technicals(ticker):
     Calculate daily (1d) technical indicators.
 
     Indicators:
-        - ZTanh: Learned z-score transformation with tanh activation [-1, +1]
+        - RSI: 14-period Relative Strength Index (0-100)
         - ADX: 14-period Average Directional Index with trend classification
         - DI_Bias: Directional indicator bias (+DI vs -DI)
         - KAMA: Kaufman's Adaptive Moving Average (10/2/30) as trend filter
+        - BB_Position: Bollinger Bands position classification
     """
     # Fetch 1 year of daily data (always fresh - daily prices are critical for entry timing)
     data = get_cached_ticker(ticker, period="1y", interval="1d", fresh=True)
@@ -31,9 +32,9 @@ def calculate_daily_technicals(ticker):
     price = close.iloc[-1]
     daily_date = pd.Timestamp(data.index[-1]).strftime('%Y-%m-%d')
 
-    # Daily ZTanh (using ticker-specific weights)
-    ztanh_daily = calculate_ztanh(close, ticker=ticker)
-    ztanh_zone_daily = get_ztanh_zone(ztanh_daily, ticker=ticker, timeframe='daily')
+    # Daily RSI (14-period)
+    rsi_daily = calculate_rsi(close)
+    rsi_zone_daily = get_rsi_zone(rsi_daily)
 
     # Daily ADX (14-period)
     adx_ind = ADXIndicator(high, low, close, window=ADX_DAILY_WINDOW)
@@ -75,15 +76,20 @@ def calculate_daily_technicals(ticker):
     else:
         price_vs_kama = "Extended Below"
 
+    # Bollinger Bands
+    bb_bands = calculate_bollinger_bands(close, period=BB_PERIOD)
+    bb_position = get_bb_position(price, bb_bands)
+
     return {
         'price': price,
         'daily_date': daily_date,
-        'ztanh_daily': ztanh_daily,
-        'ztanh_zone_daily': ztanh_zone_daily,
+        'rsi_daily': rsi_daily,
+        'rsi_zone_daily': rsi_zone_daily,
         'adx_daily': round(adx_daily, 1),
         'adx_action': adx_action,
         'di_bias': di_bias,
         'kama': round(kama, 4),
         'kama_dist': round(kama_dist, 2),
         'price_vs_kama': price_vs_kama,
+        'bb_position': bb_position,
     }
