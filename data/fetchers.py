@@ -95,22 +95,46 @@ def get_fx_rate(pair_code, lookback=5):
     return None
 
 
+def _convert_to_billions_usd(value, fx_rate, fx_mode, scale):
+    """Convert a national-currency value to billions USD.
+
+    Args:
+        value: Raw FRED observation value
+        fx_rate: FX rate from FRED
+        fx_mode: 'multiply' (val * rate = USD), 'divide' (val / rate = USD), or None
+        scale: Multiplier to normalize units (e.g., 1e-9 for raw currency → billions)
+
+    Returns:
+        float: Value in billions USD
+    """
+    if fx_mode is None:
+        return value * scale  # Already in USD (M2SL is billions, scale=1)
+    elif fx_mode == 'multiply':
+        return value * fx_rate * scale
+    else:  # divide
+        return value / fx_rate * scale
+
+
 def calculate_gli():
-    """Calculate Global Liquidity Index: Fed Net + ECB + BOJ + Global M2.
+    """Calculate Global Liquidity Index from central bank balance sheets + broad money.
 
     Formula:
         Net_Fed = FED_BS - TGA - RRP
-        GLI = Net_Fed + ECB_BS_USD + BOJ_BS_USD + Global_M2
+        GLI = Net_Fed + ECB_BS_USD + BOJ_BS_USD + Global_Broad_Money
 
+    Broad money covers 12 economies (USA, Eurozone, Japan, China, UK, Canada,
+    Australia, India, Switzerland, Brazil, South Korea, Mexico).
     All values converted to trillions USD.
     Falls back to US-only if global data unavailable.
     """
+    from config import GLI_BROAD_MONEY
+
     cache_key = "gli"
     cached = load_from_cache(cache_key)
     if cached:
         return cached
 
-    # Fetch US Fed components (weekly)
+    # --- Fetch US Fed components (weekly) ---
     fed_data = get_fred_series("WALCL", limit=24)
     tga_data = get_fred_series("WTREGEN", limit=70)
     rrp_data = get_fred_series("RRPONTSYD", limit=180)
@@ -118,70 +142,87 @@ def calculate_gli():
     if not all([fed_data, tga_data, rrp_data]):
         return None
 
-    # Fetch FX rates (with 5-day lookback for holidays)
-    eurusd = get_fx_rate("DEXUSEU")  # USD per EUR
-    usdjpy = get_fx_rate("DEXJPUS")  # JPY per USD
-    usdcny = get_fx_rate("DEXCHUS")  # CNY per USD
+    # --- Fetch all FX rates (with 5-day lookback for holidays) ---
+    fx_rates = {}
+    fx_needed = set()
+    for cfg in GLI_BROAD_MONEY.values():
+        if cfg['fx']:
+            fx_needed.add(cfg['fx'])
+    # Also need EUR/USD and JPY/USD for ECB and BOJ balance sheets
+    fx_needed.update(['DEXUSEU', 'DEXJPUS'])
 
-    # Fetch global central bank data
+    for fx_code in fx_needed:
+        fx_rates[fx_code] = get_fx_rate(fx_code)
+
+    eurusd = fx_rates.get('DEXUSEU')
+    usdjpy = fx_rates.get('DEXJPUS')
+
+    # --- Fetch central bank balance sheet data ---
     ecb_data = get_fred_series("ECBASSETSW", limit=24)  # Weekly, millions EUR
-    boj_data = get_fred_series("JPNASSETS", limit=12)   # Monthly, 100 million JPY
+    boj_data = get_fred_series("JPNASSETS", limit=12)    # Monthly, 100 million JPY
 
-    # Fetch M2 data (all monthly)
-    usa_m2_data = get_fred_series("M2SL", limit=12)           # Billions USD
-    eur_m2_data = get_fred_series("MYAGM2EZM196N", limit=12)  # EUR
-    jpy_m2_data = get_fred_series("MYAGM2JPM189S", limit=12)  # JPY
-    cny_m2_data = get_fred_series("MYAGM2CNM189N", limit=12)  # CNY
+    # --- Fetch broad money data for all configured economies ---
+    money_data = {}  # key -> [(value, date), ...]
+    money_ok = {}    # key -> bool (has data + FX rate)
+    for key, cfg in GLI_BROAD_MONEY.items():
+        try:
+            data = get_fred_series(cfg['series'], limit=12)
+        except Exception:
+            data = []
+        money_data[key] = data if data else []
 
-    # Check if we have global data
+        # Check if we can convert this series
+        if cfg['fx']:
+            money_ok[key] = bool(data) and fx_rates.get(cfg['fx']) is not None
+        else:
+            money_ok[key] = bool(data)
+
+    # Core 4 must be present for "global" status
     has_global = all([
-        eurusd, usdjpy, usdcny,
+        eurusd, usdjpy,
         ecb_data, boj_data,
-        usa_m2_data, eur_m2_data, jpy_m2_data, cny_m2_data
+        money_ok.get('usa'), money_ok.get('eur'),
+        money_ok.get('jpn'), money_ok.get('chn'),
     ])
 
-    # Build GLI time series (weekly aligned)
+    # --- Build GLI time series (weekly aligned to Fed data) ---
     gli_series = []
     for fed_val, fed_date in fed_data:
-        # Find most recent TGA and RRP values on or before fed_date
         tga_val = next((v for v, d in tga_data if d <= fed_date), None)
         rrp_val = next((v for v, d in rrp_data if d <= fed_date), None)
-        if tga_val is not None and rrp_val is not None:
-            # Net Fed in billions USD
-            # WALCL & WTREGEN are in millions USD, RRPONTSYD is in billions USD
-            net_fed = (fed_val - tga_val - rrp_val * 1000) / 1000
+        if tga_val is None or rrp_val is None:
+            continue
 
-            if has_global:
-                # ECB: millions EUR -> billions USD
-                ecb_val = next((v for v, d in ecb_data if d <= fed_date), None)
-                ecb_usd = (ecb_val * eurusd / 1000) if ecb_val else 0
+        # Net Fed in billions USD
+        # WALCL & WTREGEN are in millions USD, RRPONTSYD is in billions USD
+        net_fed = (fed_val - tga_val - rrp_val * 1000) / 1000
 
-                # BOJ: 100 million JPY -> billions USD
-                # JPNASSETS is in 100 million JPY, divide by 10 to get billions JPY
-                # then divide by JPY/USD rate to get billions USD
-                boj_val = next((v for v, d in boj_data if d <= fed_date), None)
-                boj_usd = (boj_val / 10 / usdjpy) if boj_val else 0
+        if has_global:
+            # ECB: millions EUR -> billions USD
+            ecb_val = next((v for v, d in ecb_data if d <= fed_date), None)
+            ecb_usd = (ecb_val * eurusd / 1000) if ecb_val else 0
 
-                # M2 conversions (use most recent available)
-                usa_m2 = next((v for v, d in usa_m2_data if d <= fed_date), None) or 0
+            # BOJ: 100 million JPY -> billions USD
+            boj_val = next((v for v, d in boj_data if d <= fed_date), None)
+            boj_usd = (boj_val / 10 / usdjpy) if boj_val else 0
 
-                eur_m2_val = next((v for v, d in eur_m2_data if d <= fed_date), None)
-                eur_m2_usd = (eur_m2_val * eurusd / 1e9) if eur_m2_val else 0
+            # Sum all broad money components
+            total_money = 0.0
+            for key, cfg in GLI_BROAD_MONEY.items():
+                if not money_ok.get(key):
+                    continue
+                val = next((v for v, d in money_data[key] if d <= fed_date), None)
+                if val is None:
+                    # Use most recent available (stale data better than zero)
+                    val = money_data[key][0][0] if money_data[key] else None
+                if val is not None:
+                    fx = fx_rates.get(cfg['fx']) if cfg['fx'] else None
+                    total_money += _convert_to_billions_usd(val, fx, cfg['fx_mode'], cfg['scale'])
 
-                jpy_m2_val = next((v for v, d in jpy_m2_data if d <= fed_date), None)
-                jpy_m2_usd = (jpy_m2_val / usdjpy / 1e9) if jpy_m2_val else 0
-
-                cny_m2_val = next((v for v, d in cny_m2_data if d <= fed_date), None)
-                cny_m2_usd = (cny_m2_val / usdcny / 1e9) if cny_m2_val else 0
-
-                global_m2 = usa_m2 + eur_m2_usd + jpy_m2_usd + cny_m2_usd
-
-                # Total GLI in trillions USD
-                total_gli = (net_fed + ecb_usd + boj_usd + global_m2) / 1000
-                gli_series.append((total_gli, fed_date))
-            else:
-                # Fallback: US-only (convert to trillions for consistency)
-                gli_series.append((net_fed / 1000, fed_date))
+            total_gli = (net_fed + ecb_usd + boj_usd + total_money) / 1000
+            gli_series.append((total_gli, fed_date))
+        else:
+            gli_series.append((net_fed / 1000, fed_date))
 
     if not gli_series:
         return None
@@ -215,29 +256,34 @@ def calculate_gli():
         "flat"
     )
 
-    # Build component breakdown for transparency
+    # --- Build component breakdown for transparency ---
     components = {}
     if has_global:
-        # Get latest values for each component
-        net_fed_latest = (fed_data[0][0] - tga_data[0][0] - rrp_data[0][0] * 1000) / 1000 / 1000  # Trillions
-        ecb_latest = (ecb_data[0][0] * eurusd / 1000 / 1000) if ecb_data else 0  # Trillions
-        boj_latest = (boj_data[0][0] / 10 / usdjpy / 1000) if boj_data else 0  # Trillions
-
-        usa_m2_latest = (usa_m2_data[0][0] / 1000) if usa_m2_data else 0  # Trillions
-        eur_m2_latest = (eur_m2_data[0][0] * eurusd / 1e9 / 1000) if eur_m2_data else 0
-        jpy_m2_latest = (jpy_m2_data[0][0] / usdjpy / 1e9 / 1000) if jpy_m2_data else 0
-        cny_m2_latest = (cny_m2_data[0][0] / usdcny / 1e9 / 1000) if cny_m2_data else 0
+        net_fed_latest = (fed_data[0][0] - tga_data[0][0] - rrp_data[0][0] * 1000) / 1e6  # Trillions
+        ecb_latest = (ecb_data[0][0] * eurusd / 1e6) if ecb_data else 0
+        boj_latest = (boj_data[0][0] / 10 / usdjpy / 1000) if boj_data else 0
 
         components = {
             'net_fed': round(net_fed_latest, 2),
             'ecb': round(ecb_latest, 2),
             'boj': round(boj_latest, 2),
-            'usa_m2': round(usa_m2_latest, 2),
-            'eur_m2': round(eur_m2_latest, 2),
-            'jpy_m2': round(jpy_m2_latest, 2),
-            'cny_m2': round(cny_m2_latest, 2),
-            'global_m2': round(usa_m2_latest + eur_m2_latest + jpy_m2_latest + cny_m2_latest, 2),
         }
+
+        # Add each broad money component in trillions
+        total_money_t = 0.0
+        for key, cfg in GLI_BROAD_MONEY.items():
+            if not money_ok.get(key):
+                continue
+            val = money_data[key][0][0] if money_data[key] else None
+            if val is not None:
+                fx = fx_rates.get(cfg['fx']) if cfg['fx'] else None
+                billions = _convert_to_billions_usd(val, fx, cfg['fx_mode'], cfg['scale'])
+                trillions = billions / 1000
+                components[f'{key}_m'] = round(trillions, 2)
+                total_money_t += trillions
+
+        components['broad_money'] = round(total_money_t, 2)
+        components['n_economies'] = sum(1 for k in GLI_BROAD_MONEY if money_ok.get(k))
 
     result = {
         'value': round(current_gli, 2),

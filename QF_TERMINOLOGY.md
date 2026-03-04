@@ -123,15 +123,15 @@ Adaptive MA that adjusts to market noise. Used as trend filter on daily.
 ---
 
 ### GLI (Global Liquidity Index)
-Global central bank liquidity aggregated from Fed, ECB, BOJ, and major economy M2.
+Global central bank liquidity aggregated from Fed, ECB, BOJ balance sheets + broad money (M2/M3) across 12 economies.
 
 **Formula:**
 ```
 Net_Fed = FED_BS - TGA - RRP
-GLI = Net_Fed + ECB_BS_USD + BOJ_BS_USD + Global_M2
+GLI = Net_Fed + ECB_BS_USD + BOJ_BS_USD + Global_Broad_Money
 ```
 
-**Components (all converted to USD):**
+**Central Bank Balance Sheets:**
 
 | Component | FRED Code | Currency | Frequency |
 |-----------|-----------|----------|-----------|
@@ -140,12 +140,27 @@ GLI = Net_Fed + ECB_BS_USD + BOJ_BS_USD + Global_M2
 | RRP | RRPONTSYD | USD | Daily |
 | ECB BS | ECBASSETSW | EUR | Weekly |
 | BOJ BS | JPNASSETS | JPY | Monthly |
-| USA M2 | M2SL | USD | Monthly |
-| EUR M2 | MYAGM2EZM196N | EUR | Monthly |
-| JPY M2 | MYAGM2JPM189S | JPY | Monthly |
-| CNY M2 | MYAGM2CNM189N | CNY | Monthly |
 
-**FX Conversion (FRED):** DEXUSEU (EUR), DEXJPUS (JPY), DEXCHUS (CNY)
+**Broad Money (12 economies):**
+
+| Economy | FRED Code | Type | Currency |
+|---------|-----------|------|----------|
+| USA | M2SL | M2 | USD |
+| Eurozone | MABMM301EZM189N | M3 | EUR |
+| Japan | MABMM301JPM189S | M3 | JPY |
+| China | MYAGM2CNM189N | M2 | CNY |
+| UK | MABMM301GBM189N | M3 | GBP |
+| Canada | MABMM301CAM189N | M3 | CAD |
+| Australia | MABMM301AUM189N | M3 | AUD |
+| India | MABMM301INM189N | M3 | INR |
+| Switzerland | MABMM301CHM189N | M3 | CHF |
+| Brazil | MABMM301BRM189N | M3 | BRL |
+| S. Korea | MABMM301KRM189S | M3 | KRW |
+| Mexico | MABMM301MXM189N | M3 | MXN |
+
+**Note:** FRED's non-US broad money series lag by months/years. The absolute GLI value will undercount vs. TradingView's GLI (~15-20%), but trend/momentum signals (WoW, MoM, QoQ) remain valid for directional analysis.
+
+**FX Conversion:** 11 FRED FX pairs (DEXUSEU, DEXJPUS, DEXCHUS, DEXUSUK, DEXCAUS, DEXUSAL, DEXINUS, DEXSZUS, DEXBZUS, DEXKOUS, DEXMXUS).
 
 | GLI 4w Change | Signal |
 |---------------|--------|

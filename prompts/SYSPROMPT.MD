@@ -43,8 +43,8 @@ User provides XLSX file: `YYYYMMDD_HHMM_ANALYSIS.xlsx` containing 4 sheets:
 
 **Sheet 1 - Macro:**
 - Rows 1-2: Data timeframes (Weekly candle date, Daily candle date)
-- GLI (Global Liquidity): Fed Net + ECB + BOJ + Global M2, in trillions USD
-- GLI Components: Breakdown showing Fed Net, ECB, BOJ, M2 contributions
+- GLI (Global Liquidity): Fed Net + ECB + BOJ + Broad Money (12 economies), in trillions USD
+- GLI Components: Breakdown showing Fed Net, ECB, BOJ, Broad Money total
 - VIX, VIX RSI with sentiment labels
 
 **Sheet 2 - Weekly:** Name, Ticker, Price, RSI, RSI_Zone, TSMOM_%, MA_Score, MA_Max, ADX, Regime, Regime_Bias

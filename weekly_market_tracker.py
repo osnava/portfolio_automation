@@ -58,12 +58,13 @@ def main():
             # Add component breakdown if global data available
             if gli.get('is_global') and gli.get('components'):
                 c = gli['components']
+                n = c.get('n_economies', '?')
                 macro_data.append({
                     'Indicator': 'GLI Components',
                     'Value': '-',
                     'Unit': 'Trillions USD',
                     'Signal': '-',
-                    'Detail': f"Fed Net: {c.get('net_fed', 'N/A')}T | ECB: {c.get('ecb', 'N/A')}T | BOJ: {c.get('boj', 'N/A')}T | M2: {c.get('global_m2', 'N/A')}T"
+                    'Detail': f"Fed Net: {c.get('net_fed', 'N/A')}T | ECB: {c.get('ecb', 'N/A')}T | BOJ: {c.get('boj', 'N/A')}T | Broad Money ({n}): {c.get('broad_money', 'N/A')}T"
                 })
         else:
             macro_data.append({'Indicator': 'Global Liquidity', 'Value': None, 'Unit': None, 'Signal': 'Error', 'Detail': 'Error'})
